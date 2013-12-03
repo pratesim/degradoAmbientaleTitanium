@@ -112,7 +112,31 @@ var db = {
         client.setRequestHeader("Accept", "application/json");
         client.send();
     },
-    postDoc: function() {}
+    postDoc: function(doc, callback) {
+        if (1 > arguments.length) throw "postDoc() richiede almeno 1 argomento: doc (object).";
+        if ("object" != typeof doc || !doc.title || "string" != typeof doc.title || !doc.msg || "string" != typeof doc.msg || !doc.img || "object" != typeof doc.img || !doc.img.content_type || "string" != typeof doc.img.content_type || !doc.img.data || "string" != typeof doc.img.data || !doc.loc || "object" != typeof doc.loc || !doc.loc.latitude || "number" != typeof doc.loc.latitude || doc.loc.latitude > 90 || -90 > doc.loc.latitude || !doc.loc.longitude || "number" != typeof doc.loc.longitude || doc.loc.longitude > 180 || -180 > doc.loc.longitude) throw 'Parametro "doc" non valido.';
+        var newDoc = {};
+        newDoc.userId = user.doc._id;
+        newDoc.title = doc.title;
+        newDoc.msg = doc.msg;
+        newDoc.loc = doc.loc;
+        newDoc._attachments = {
+            img: doc.img
+        };
+        var url = db.proto + db.host + ":" + db.port + "/" + db.name;
+        var client = Ti.Network.createHTTPClient({
+            onload: function(data) {
+                callback && callback(void 0, data);
+            },
+            error: function(e) {
+                callback && callback(e, void 0);
+            }
+        });
+        client.open("POST", url);
+        client.setRequestHeader("Authorization", "Basic " + user.doc.base64);
+        client.setRequestHeader("Content-Type", "application/json");
+        client.send(JSON.stringify(newDoc));
+    }
 };
 
 exports.db = {
@@ -138,7 +162,27 @@ var user = {
         roles: [],
         type: "user"
     },
-    check: function() {},
+    check: function(callback) {
+        if (1 != arguments.length || "function" != typeof callback) throw "checkUser() richiede un argomento: callback (function(err, data)).";
+        if (!this.isConfigured()) throw "Impossibile controllare se l'utente e' registrato: utente non configurato.";
+        if (!db.isConfigured()) throw "Impossibole controllare se l'utente e' registrato: server non configurato.";
+        var url = db.proto + db.host + ":" + db.port;
+        var client = Ti.Network.createHTTPClient({
+            onload: function() {
+                callback(void 0, {
+                    isRegistered: true
+                });
+            },
+            onerror: function(e) {
+                "401" == e.error ? callback(void 0, {
+                    isRegistered: false
+                }) : callback(e, void 0);
+            }
+        });
+        client.open("GET", url);
+        client.setRequestHeader("Authorization", "Basic " + user.doc.base64);
+        client.send();
+    },
     getRemote: function() {},
     isConfigured: function() {
         if (this.doc.configured) return true;

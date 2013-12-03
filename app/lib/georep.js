@@ -306,8 +306,47 @@ var db = {
 	 *        data: oggetto che mostra le opzioni settate se non si sono verificati errori.
 	 */ 
 	postDoc: function(doc,callback){
-		// TODO
-	}
+			if( arguments.length < 1 )
+				throw 'postDoc() richiede almeno 1 argomento: doc (object).';
+			else if ( typeof doc != 'object' ||
+			!doc.title || typeof doc.title != 'string' ||
+			!doc.msg   || typeof doc.msg   != 'string' ||
+			!doc.img   || typeof doc.img   != 'object' ||
+			!doc.img.content_type || typeof doc.img.content_type != 'string' ||
+			!doc.img.data         || typeof doc.img.data         != 'string' ||
+			!doc.loc || typeof doc.loc != 'object' ||
+			!doc.loc.latitude  || typeof doc.loc.latitude  != 'number' || doc.loc.latitude  >  90 || doc.loc.latitude  <  -90 ||
+			!doc.loc.longitude || typeof doc.loc.longitude != 'number' || doc.loc.longitude > 180 || doc.loc.longitude < -180 ){
+				throw 'Parametro "doc" non valido.';
+			} else {
+				var newDoc = {};
+				newDoc.userId = user.doc._id;
+				newDoc.title = doc.title;
+				newDoc.msg = doc.msg;
+				newDoc.loc = doc.loc;
+				newDoc._attachments = {
+					img: doc.img
+				};
+				var url = db.proto + db.host + ':' +
+						  db.port + '/' + db.name;
+				var client = Ti.Network.createHTTPClient({
+					onload: function(data){
+						if(callback)
+							callback(undefined,data);
+					},
+					error: function(e){
+						if(callback)
+							callback(e,undefined);
+					}
+				});
+				client.open("POST", url);
+				
+				client.setRequestHeader("Authorization", 'Basic ' + user.doc.base64);
+				client.setRequestHeader("Content-Type", "application/json");
+				
+				client.send(JSON.stringify(newDoc));
+			}
+		}
 };
 /**
  * rendo pubbliche solo le funzioni relative al DB così si proteggono le configurazioni.
@@ -352,7 +391,38 @@ var user = {
 	 *        data: true se l'utente è già registrato, false se non lo è .
 	 */
 	check: function(callback){
-		// TODO
+		/* callback è obbligatorio perchè checkUser() chiama $.ajax() che è asincrona */
+			if( arguments.length != 1 || typeof callback != 'function'){
+				throw 'checkUser() richiede un argomento: callback (function(err, data)).';	
+			} else if (!this.isConfigured()){
+				throw 'Impossibile controllare se l\'utente e\' registrato: utente non configurato.';
+			} else if (!db.isConfigured()){
+				throw 'Impossibole controllare se l\'utente e\' registrato: server non configurato.';
+			} else {
+				/* richiedo info sul db, usando come credenziali di accesso quelle dell'utente georep.options.user, 
+				   se l'accesso al db viene negato, significa che l'utente non è registrato */
+				var url = db.proto + db.host + ':' + db.port;
+				var client = Ti.Network.createHTTPClient({
+					onload: function(data){
+						/*console.log("Utente gia' registrato "+ data);*/
+						callback(undefined, {isRegistered: true});
+					},
+					onerror: function(e){
+						//Ti.API.debug(e);
+						if (e.error == '401') {
+							/*console.log("Utente NON registrato");*/
+							callback(undefined, {isRegistered: false});
+						} else {
+							callback(e, undefined);
+						}
+					}
+				});
+				client.open("GET", url);
+				
+				client.setRequestHeader("Authorization", 'Basic ' + user.doc.base64);
+				
+				client.send();
+			}
 	},
 	/** 
 	 * Recupera le informazioni d'utente dal server.
