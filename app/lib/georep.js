@@ -143,24 +143,24 @@ var db = {
 
 				var client = Ti.Network.createHTTPClient({
 					onload: function(data){
-						Ti.API.info("Ricevuto: " + this.responseText);
-						alert("Success");
+						//Ti.API.info("Ricevuto: " + this.responseText);
+						//alert("Success");
 						if(callback)
 							// this.responseText contiene la risposta di tipo json
 							callback(undefined,this.responseText);
 					},
 					onerror: function(e){
-						Ti.API.debug(e.error);
-						alert("error");
+						//Ti.API.debug(e.error);
+						//alert("error");
 						if(callback)
 							callback(e,undefined);
 					}
 				});
 				
 				client.open("GET", url);
-				Ti.API.debug("user in getDoc");
+				/*Ti.API.debug("user in getDoc");
 				Ti.API.debug(user);
-				Ti.API.debug("----------------");
+				Ti.API.debug("----------------");*/
 				client.setRequestHeader("Authorization", "Basic " + user.doc.base64);
 				/* mi assicura che la risposta arrivi con l'allegato in base64
 				           invece che in binario in un oggetto MIME a contenuti multipli
@@ -190,7 +190,53 @@ var db = {
 	 *     }
 	 */
 	getDocsInBox: function(bl_corner, tr_corner, callback){
-		// TODO
+		var viewPath = constants.designDocs[0].name + '/' +
+			               constants.designDocs[0].handlers[1].name + '/' +
+			               constants.designDocs[0].handlers[1].views[0];
+		var queryOpts = '?bbox=' +
+			                bl_corner.lng + ',' + bl_corner.lat + ',' +
+			                tr_corner.lng + ',' + tr_corner.lat;
+		
+		if (arguments.length < 2)
+			throw 'getDocsInBox() richiede due argomenti: bl_corner (object), tr_corner (object).';
+		else if (typeof bl_corner != 'object' || typeof tr_corner != 'object')
+			throw 'Uno o piu\' parametri non validi: devono essere \'object\'.';
+		else if (
+		!bl_corner.lng || typeof bl_corner.lng != 'number'|| bl_corner.lng < -180 || bl_corner.lng > 180 ||
+		!bl_corner.lat || typeof bl_corner.lat != 'number'|| bl_corner.lat <  -90 || bl_corner.lat >  90  )
+			throw 'Parametro non valido: bl_corner.';
+		else if (
+		!tr_corner.lng || typeof tr_corner.lng != 'number'|| tr_corner.lng < -180 || tr_corner.lng > 180 ||
+		!tr_corner.lat || typeof tr_corner.lat != 'number'|| tr_corner.lat <  -90 || tr_corner.lat >  90  )
+			throw 'Parametro non valido: tr_corner.';
+		else if (arguments.length > 2 && (!callback || typeof callback != 'function'))
+			throw 'Parametro opzionale non valido: callback.';
+		else if (!db.isConfigured())
+			throw 'Impossibile contattare il database: db non cofigurato';
+		else if (!user.isConfigured())
+			throw 'Impossibile inviare la richiesta al server da un utente non configurato.';
+		else {
+			var url = db.proto + db.host + ':' + db.port + '/' +
+					  db.name + '/_design/' + viewPath + queryOpts;
+			var client = Ti.Network.createHTTPClient({
+				onload: function(data){
+					//Ti.API.info(this.responseText);
+					if(callback)
+						callback(undefined, this.responseText);
+				},
+				onerror: function(e){
+					//Ti.API.debug(e.error);
+					if(callback)
+						callback(e,undefined);
+				}
+			});
+			client.open("GET", url);
+			
+			client.setRequestHeader("Authorization", 'Basic ' + user.doc.base64);
+			client.setRequestHeader("Accept", 'application/json');
+			
+			client.send();
+		}
 	},
 	/**
 	 * Chiede al DB tutti gli ID dei documenti creati da un utente.
@@ -202,7 +248,41 @@ var db = {
 	 *     della query.
 	 */
 	getUserDocs: function(userId, callback){
-		// TODO
+		var viewPath = constants.designDocs[0].name + '/' +
+			           constants.designDocs[0].handlers[0].name + '/' +
+			           constants.designDocs[0].handlers[0].views[0];
+		var queryOpts = '?key="' + userId + '"';
+		
+		if (arguments.length < 1)
+			throw 'getUserDocs() richiede almeno un argomento: userId (string).';
+		else if (!userId || typeof userId != 'string')
+			throw 'parametro non valido: userId deve essere una stringa non vuota.';
+		else if (arguments.length > 1 && typeof callback != 'function')
+			throw 'parametro opzionale non valido: callback deve essere una funzione.';
+		else if (!db.isConfigured())
+			throw 'Impossibile contattare il database: db non cofigurato';
+		else if (!user.isConfigured())
+			throw 'Impossibile inviare la richiesta al server da un utente non configurato.';
+		else {
+			var url = db.proto + db.host + ':' + db.port + '/' +
+					  db.name + '/_design/' + viewPath + queryOpts;
+			var client = Ti.Network.createHTTPClient({
+				onload: function(data){
+					if(callback)
+						callback(undefined, this.responseText);
+				},
+				onerror: function(e){
+					if(callback)
+						callback(e,undefined);
+				}
+			});
+			client.open("GET", url);
+			
+			client.setRequestHeader("Authorization", 'Basic ' + user.doc.base64);
+			client.setRequestHeader("Accept", 'application/json');
+			
+			client.send();
+		}
 	},
 	/**
 	 * Invia un nuovo documento sul database remoto
@@ -347,9 +427,9 @@ var user = {
 			this.doc.type = 'user';
 			this.doc.roles = [];
 			this.isConfigured();
-			Ti.API.debug("User settato: ");
+			/*Ti.API.debug("User settato: ");
 			Ti.API.debug(user.doc);
-			Ti.API.debug("----------------");
+			Ti.API.debug("----------------");*/
 		}
 	},
 	/**

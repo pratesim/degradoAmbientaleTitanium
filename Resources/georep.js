@@ -55,26 +55,63 @@ var db = {
         var url = db.proto + db.host + ":" + db.port + "/" + db.name + "/" + docId + attach;
         var client = Ti.Network.createHTTPClient({
             onload: function() {
-                Ti.API.info("Ricevuto: " + this.responseText);
-                alert("Success");
                 callback && callback(void 0, this.responseText);
             },
             onerror: function(e) {
-                Ti.API.debug(e.error);
-                alert("error");
                 callback && callback(e, void 0);
             }
         });
         client.open("GET", url);
-        Ti.API.debug("user in getDoc");
-        Ti.API.debug(user);
-        Ti.API.debug("----------------");
         client.setRequestHeader("Authorization", "Basic " + user.doc.base64);
         client.setRequestHeader("Accept", "application/json");
         client.send();
     },
-    getDocsInBox: function() {},
-    getUserDocs: function() {},
+    getDocsInBox: function(bl_corner, tr_corner, callback) {
+        var viewPath = constants.designDocs[0].name + "/" + constants.designDocs[0].handlers[1].name + "/" + constants.designDocs[0].handlers[1].views[0];
+        var queryOpts = "?bbox=" + bl_corner.lng + "," + bl_corner.lat + "," + tr_corner.lng + "," + tr_corner.lat;
+        if (2 > arguments.length) throw "getDocsInBox() richiede due argomenti: bl_corner (object), tr_corner (object).";
+        if ("object" != typeof bl_corner || "object" != typeof tr_corner) throw "Uno o piu' parametri non validi: devono essere 'object'.";
+        if (!bl_corner.lng || "number" != typeof bl_corner.lng || -180 > bl_corner.lng || bl_corner.lng > 180 || !bl_corner.lat || "number" != typeof bl_corner.lat || -90 > bl_corner.lat || bl_corner.lat > 90) throw "Parametro non valido: bl_corner.";
+        if (!tr_corner.lng || "number" != typeof tr_corner.lng || -180 > tr_corner.lng || tr_corner.lng > 180 || !tr_corner.lat || "number" != typeof tr_corner.lat || -90 > tr_corner.lat || tr_corner.lat > 90) throw "Parametro non valido: tr_corner.";
+        if (arguments.length > 2 && (!callback || "function" != typeof callback)) throw "Parametro opzionale non valido: callback.";
+        if (!db.isConfigured()) throw "Impossibile contattare il database: db non cofigurato";
+        if (!user.isConfigured()) throw "Impossibile inviare la richiesta al server da un utente non configurato.";
+        var url = db.proto + db.host + ":" + db.port + "/" + db.name + "/_design/" + viewPath + queryOpts;
+        var client = Ti.Network.createHTTPClient({
+            onload: function() {
+                callback && callback(void 0, this.responseText);
+            },
+            onerror: function(e) {
+                callback && callback(e, void 0);
+            }
+        });
+        client.open("GET", url);
+        client.setRequestHeader("Authorization", "Basic " + user.doc.base64);
+        client.setRequestHeader("Accept", "application/json");
+        client.send();
+    },
+    getUserDocs: function(userId, callback) {
+        var viewPath = constants.designDocs[0].name + "/" + constants.designDocs[0].handlers[0].name + "/" + constants.designDocs[0].handlers[0].views[0];
+        var queryOpts = '?key="' + userId + '"';
+        if (1 > arguments.length) throw "getUserDocs() richiede almeno un argomento: userId (string).";
+        if (!userId || "string" != typeof userId) throw "parametro non valido: userId deve essere una stringa non vuota.";
+        if (arguments.length > 1 && "function" != typeof callback) throw "parametro opzionale non valido: callback deve essere una funzione.";
+        if (!db.isConfigured()) throw "Impossibile contattare il database: db non cofigurato";
+        if (!user.isConfigured()) throw "Impossibile inviare la richiesta al server da un utente non configurato.";
+        var url = db.proto + db.host + ":" + db.port + "/" + db.name + "/_design/" + viewPath + queryOpts;
+        var client = Ti.Network.createHTTPClient({
+            onload: function() {
+                callback && callback(void 0, this.responseText);
+            },
+            onerror: function(e) {
+                callback && callback(e, void 0);
+            }
+        });
+        client.open("GET", url);
+        client.setRequestHeader("Authorization", "Basic " + user.doc.base64);
+        client.setRequestHeader("Accept", "application/json");
+        client.send();
+    },
     postDoc: function() {}
 };
 
@@ -121,9 +158,6 @@ var user = {
         this.doc.type = "user";
         this.doc.roles = [];
         this.isConfigured();
-        Ti.API.debug("User settato: ");
-        Ti.API.debug(user.doc);
-        Ti.API.debug("----------------");
     },
     signup: function() {},
     update: function(user, callback) {

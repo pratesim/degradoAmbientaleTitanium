@@ -103,9 +103,19 @@ function Controller() {
         host: "pram.homepc.it",
         port: 5984
     });
+    var testCallback = function(err, data) {
+        err ? Ti.API.debug(err.error) : Ti.API.info(data);
+    };
     $.tabGroup.open();
-    georep.db.getDoc("6eeccb20fb0aae3a637e2b359d0003af", false);
-    Ti.API.debug(georep.user.doc);
+    georep.db.getDoc("6eeccb20fb0aae3a637e2b359d0003af", false, testCallback);
+    georep.db.getDocsInBox({
+        lng: 10.244354,
+        lat: 43.78324
+    }, {
+        lng: 10.424255,
+        lat: 43.928314
+    }, testCallback);
+    georep.db.getUserDocs("org.couchdb.user:99deba01000eee95", testCallback);
     _.extend($, exports);
 }
 
