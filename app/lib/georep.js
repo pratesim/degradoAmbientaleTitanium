@@ -68,7 +68,7 @@ var db = {
 		} else if (!name || !passwd || typeof name != 'string' || typeof passwd != 'string') {
 			throw 'Impossibile settare l\'amministratore, parametri non validi.';
 		} else {
-			db.admin.base64 = btoa(name+':'+passwd);
+			db.admin.base64 = Ti.Utils.base64encode(name+':'+passwd).text;
 			db.admin.configured = true;
 			db.isConfigured();
 		}
@@ -129,7 +129,46 @@ var db = {
 	 *        data: oggetto che mostra le opzioni settate se non si sono verificati errori.
 	 */ 
 	getDoc: function(docId, attachments, callback){
-		// TODO
+		if( arguments.length < 2 )
+				throw 'getDoc() richiede almeno 2 argomenti: docId (string), attachment (boolean).';
+			else if (!docId || typeof docId != 'string' || typeof attachments != 'boolean')
+				throw 'Uno o piu\' parametri non validi.';
+			else {
+				var attach = (attachments)?'?attachments=true':'?attachments=false';
+				var url = db.proto +
+						  db.host + ':' +
+						  db.port + '/' +
+						  db.name + '/' + docId +
+						  attach;
+
+				var client = Ti.Network.createHTTPClient({
+					onload: function(data){
+						Ti.API.info("Ricevuto: " + this.responseText);
+						alert("Success");
+						if(callback)
+							// this.responseText contiene la risposta di tipo json
+							callback(undefined,this.responseText);
+					},
+					onerror: function(e){
+						Ti.API.debug(e.error);
+						alert("error");
+						if(callback)
+							callback(e,undefined);
+					}
+				});
+				
+				client.open("GET", url);
+				Ti.API.debug("user in getDoc");
+				Ti.API.debug(user);
+				Ti.API.debug("----------------");
+				client.setRequestHeader("Authorization", "Basic " + user.doc.base64);
+				/* mi assicura che la risposta arrivi con l'allegato in base64
+				           invece che in binario in un oggetto MIME a contenuti multipli
+				*/ 
+				client.setRequestHeader("Accept", "application/json");
+				
+				client.send();
+			}
 	},
 	/**
 	 * Chiede al DB tutti i documenti che sono posizionati in una certa area
@@ -213,15 +252,17 @@ exports.db = {
  * sezione relativa all'utente che utilizza il DB
  */
 var user = {
-	_id: undefined, /* identificatore unico associato all'utente */
-	base64: undefined, /* credenziali dell'utente utilizzate per il login sul DB codificate in 'base64' */
-	configured: false, /* indica se l'utente e' stato configurato */
-	mail: undefined, /* indirizzo email dell'utente */
-	name: undefined, /* username utilizzato dall'utente per l'autenticazione sul DB */
-	nick: undefined, /* nickname arbitrariamente scelto dall'utente */
-	password: undefined, /* password usata dall'utente per l'autenticazione sul DB */
-	roles: [], /* ruoli dell'utente sul DB; deve essere [] */
-	type: 'user', /* tipo dell'utente; deve essere 'user' */
+	doc: {
+		_id: undefined, /* identificatore unico associato all'utente */
+		base64: undefined, /* credenziali dell'utente utilizzate per il login sul DB codificate in 'base64' */
+		configured: false, /* indica se l'utente e' stato configurato */
+		mail: undefined, /* indirizzo email dell'utente */
+		name: undefined, /* username utilizzato dall'utente per l'autenticazione sul DB */
+		nick: undefined, /* nickname arbitrariamente scelto dall'utente */
+		password: undefined, /* password usata dall'utente per l'autenticazione sul DB */
+		roles: [], /* ruoli dell'utente sul DB; deve essere [] */
+		type: 'user', /* tipo dell'utente; deve essere 'user' */
+	},
 	/**
 	 * Controlla se un utente è registrato sul server CouchDB (geocouch).
 	 * 
@@ -262,16 +303,16 @@ var user = {
 	 * tale risultato.
 	 */
 	isConfigured: function(){
-		if (this.configured)
+		if (this.doc.configured)
 			return true;
 		else {
-			this.configured = (
-				this._id != undefined  && this.base64 != undefined &&
-				this.mail != undefined && this.name != undefined &&
-				this.nick != undefined && this.password != undefined &&
-				this.roles != undefined && this.type != undefined
+			this.doc.configured = (
+				this.doc._id != undefined  && this.doc.base64 != undefined &&
+				this.doc.mail != undefined && this.doc.name != undefined &&
+				this.doc.nick != undefined && this.doc.password != undefined &&
+				this.doc.roles != undefined && this.doc.type != undefined
 			);
-			return this.configured;
+			return this.doc.configured;
 		}
 	},
 	/**
@@ -297,15 +338,18 @@ var user = {
 		!user.mail      || typeof user.mail      != 'string' ){
 			throw 'Impossibile settare "user", uno o piu\' properties non valide.';
 		} else {
-			user._id  = 'org.couchdb.user:'+user.name;
-			user.name = user.name;
-			user.password = user.password;
-			user.base64 = btoa(user.name+':'+user.password);
-			user.nick = user.nick;
-			user.mail = user.mail;
-			user.type = 'user';
-			user.roles = [];
+			this.doc._id  = 'org.couchdb.user:'+user.name;
+			this.doc.name = user.name;
+			this.doc.password = user.password;
+			this.doc.base64 = Ti.Utils.base64encode(user.name+':'+user.password).text;
+			this.doc.nick = user.nick;
+			this.doc.mail = user.mail;
+			this.doc.type = 'user';
+			this.doc.roles = [];
 			this.isConfigured();
+			Ti.API.debug("User settato: ");
+			Ti.API.debug(user.doc);
+			Ti.API.debug("----------------");
 		}
 	},
 	/**
@@ -331,7 +375,7 @@ var user = {
 	update: function(user, callback){
 		if (arguments.length < 1){
 			throw 'update() richiede un argomento: user (object).';
-		} else if (typeof user != 'object') {
+		} else if (typeof user.doc != 'object') {
 			throw 'Impossibile aggiornare l\'utente, parametro non valido.';
 		} else if (
 		!user.name      || typeof user.name      != 'string' ||
@@ -346,48 +390,9 @@ var user = {
 		} else if (!db.isConfigured()) {
 				throw 'Impossibile contattare il database: server non configurato.';
 		} else {
-			this.getRemote(function(err,data){
-				if(!err){
-					var rev = data._rev;
-					$.ajax({
-						url: db.proto + db.host + ':' +
-							 db.port + '/_users/' + user._id +
-							 '?rev=' + rev,
-						type: 'PUT',
-						headers: {
-							Authorization: 'Basic ' + user.base64
-						},
-						dataType: 'json',
-						data: JSON.stringify({
-							name: user.name,
-							password: user.password,
-							nick: user.nick,
-							mail: user.mail,
-							type: user.type,
-							roles: user.roles
-						}),
-						success: function(data){
-							user.set(user);
-							user.isConfigured();
-							/*console.log("Utente registrato con successo! " +data);*/
-							if (callback) {
-								callback(undefined, data);
-							}
-						},
-						error: function(jqXHR, textStatus, errorThrown){
-							/*console.log("Utente NON registrato! " + jqXHR + textStatus + errorThrown);*/
-							if (callback){
-								callback({jqXHR: jqXHR, textStatus: textStatus, errorThrown: errorThrown}, undefined);
-							}
-						}
-					});
-				}else{
-					if (callback){
-						callback(err, undefined);
-					}
-				}
-			});
+			//TODO
 		}
+		
 	}
 };
 /**
@@ -399,5 +404,6 @@ exports.user = {
 	isConfigured: user.isConfigured,
 	set: user.set,
 	signup: user.signup,
-	update: user.update
+	update: user.update,
+	doc: user.doc
 };
