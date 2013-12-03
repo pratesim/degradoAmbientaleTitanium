@@ -89,7 +89,9 @@ function Controller() {
     $.__views.tabGroup && $.addTopLevelView($.__views.tabGroup);
     exports.destroy = function() {};
     _.extend($, $.__views);
+    var lib = require("georep");
     $.tabGroup.open();
+    lib.getDbInfo();
     _.extend($, exports);
 }
 

@@ -21,6 +21,5 @@
                 </Window>
             </Tab>
             
-            <!-- Use the Require tag to include external Ti.UI.Tab views -->
         </TabGroup>
 </Alloy>
