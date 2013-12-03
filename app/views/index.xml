@@ -1,5 +1,26 @@
 <Alloy>
-	<Window class="container">
-		<Label id="label" onClick="doClick">Hello, World</Label>
-	</Window>
+		<TabGroup id="tabGroup" backgroundColor="white" >
+            <Tab id="tabMap" title="Mappa" icon="KS_nav_views.png">
+                <Window id="winMap" title="Mappa">
+                   <Label id="label1" color="#999">Mappa</Label>
+                </Window>
+            </Tab>
+            <Tab id="tabMyRepo" title="Mie Segnalazioni" icon="KS_nav_views.png">
+                <Window id="winMyRepo" title="Mie Segnalazioni">
+                    <Label id="label2" color="#999">Le mie segnalazioni</Label>
+                </Window>
+            </Tab>
+            <Tab id="tabSendRepo" title="Segnala" icon="KS_nav_views.png">
+                <Window id="winSendRepo" title="Segnala">
+                    <Label id="label3" color="#999">Invio Segnalazione</Label>
+                </Window>
+            </Tab>
+            <Tab id="tabOptions" title="Opzioni" icon="KS_nav_views.png">
+                <Window id="winOptions" title="Opzioni">
+                    <Label id="label4" color="#999">Opzioni</Label>
+                </Window>
+            </Tab>
+            
+            <!-- Use the Require tag to include external Ti.UI.Tab views -->
+        </TabGroup>
 </Alloy>
