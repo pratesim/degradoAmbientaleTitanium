@@ -14,19 +14,24 @@ georep.db.setURLServer({
 	port: 5984
 });
 var testCallback = function (err, data){
-		console.log("-----");
+		/*console.log("-----");
+		console.log("errore");
 		console.log(err);
-		console.log("-----");
+		console.log("data");
+		console.log(data);
+		console.log("-----");*/
 		if (err == undefined){
+			alert("Success");
 			Ti.API.info(data);
 		}
 		else {
+			alert("Error");
 			Ti.API.debug(err.error);
 		}
 };
 
 $.tabGroup.open();
-
+ /* test con utente già registrato */
 georep.user.check(testCallback);
 georep.db.getDoc("6eeccb20fb0aae3a637e2b359d0003af", false, testCallback);
 georep.db.getDocsInBox({lng: 10.244354, lat: 43.78324}, {lng: 10.424255, lat: 43.928314}, testCallback);
@@ -46,3 +51,14 @@ var doc = {
 };
 georep.db.postDoc(doc, testCallback);*/
 georep.user.getRemote(testCallback);
+/* fine test con utente già registrato */
+
+/* test di registrazione e aggiornamento nuovo utente */
+var userupdate = {
+		name: 'mau',
+       	password: 'mau',
+       	nick: 'ganganstyle',
+       	mail: 'scinne@mail.com'
+};
+
+georep.user.update(userupdate, testCallback);

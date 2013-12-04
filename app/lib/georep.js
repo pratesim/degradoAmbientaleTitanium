@@ -533,7 +533,42 @@ var user = {
 	 *        data: oggetto che mostra il messaggio ricevuto se non si sono verificati errori.
 	 */
 	signup: function(callback){
-		// TODO
+			if( arguments.length == 1 && typeof callback != 'function' ) {
+				throw 'Il parametro opzionale deve essere una funzione';
+			} else {
+				var url = db.proto + db.host + ':' +
+						  db.port + '/_users/' + user.doc._id;
+						  
+				var client = Ti.Network.createHTTPClient({
+					onload: function(data){
+						/*console.log("Utente registrato con successo! " +data);*/
+						if (callback) {
+							callback(undefined, data);
+						}
+					},
+					onerror: function(e){
+						/*console.log("Utente NON registrato! " + jqXHR + textStatus + errorThrown);*/
+						if (callback){
+							callback(e, undefined);
+						}
+					}
+				});
+				client.open("PUT", url);
+				
+				client.setRequestHeader("Authorization", 'Basic ' + db.admin.base64);
+				client.setRequestHeader("Content-Type", "application/json");
+				
+				var usersignup = {
+					 name: user.doc.name,
+					 password: user.doc.password,
+					 nick: user.doc.nick,
+					 mail: user.doc.mail,
+					 type: user.doc.type,
+					 roles: user.doc.roles
+				};
+				client.send(JSON.stringify(usersignup));
+				
+			}
 	},
 	/**
 	 * Aggiorna l'utente corrente sia in locale che sul DB.
@@ -545,26 +580,70 @@ var user = {
 	 *        data: oggetto che mostra il messaggio ricevuto se non si sono verificati errori.
 	 */
 	update: function(user, callback){
-		if (arguments.length < 1){
-			throw 'update() richiede un argomento: user (object).';
-		} else if (typeof user.doc != 'object') {
-			throw 'Impossibile aggiornare l\'utente, parametro non valido.';
-		} else if (
-		!user.name      || typeof user.name      != 'string' ||
-		!user.password  || typeof user.password  != 'string' ||
-		!user.nick      || typeof user.nick      != 'string' ||
-		!user.mail      || typeof user.mail      != 'string' ){
-			throw 'Impossibile settare "user", uno o piu\' properties non valide.';
-		} else if (arguments.length > 1 && typeof callback != 'function') {
-				throw 'Il parametro opzionale deve essere una funzione';
-		} else if (!user.isConfigured()) {
-				throw 'Utente corrente non configurato.';
-		} else if (!db.isConfigured()) {
-				throw 'Impossibile contattare il database: server non configurato.';
-		} else {
-			//TODO
-		}
-		
+			if (arguments.length < 1){
+				throw 'update() richiede un argomento: user (object).';
+			} else if (typeof user != 'object') {
+				throw 'Impossibile aggiornare l\'utente, parametro non valido.';
+			} else if (
+			!user.name      || typeof user.name      != 'string' ||
+			!user.password  || typeof user.password  != 'string' ||
+			!user.nick      || typeof user.nick      != 'string' ||
+			!user.mail      || typeof user.mail      != 'string' ){
+				throw 'Impossibile settare "user", uno o piu\' properties non valide.';
+			} else if (arguments.length > 1 && typeof callback != 'function') {
+					throw 'Il parametro opzionale deve essere una funzione';
+			} else if (!this.isConfigured()) {
+					throw 'Utente corrente non configurato.';
+			} else if (!db.isConfigured()) {
+					throw 'Impossibile contattare il database: server non configurato.';
+			} else {
+				var usrtmp = this;
+				this.getRemote(function(err,data){					
+					if(!err){
+						var rev = JSON.parse(data)._rev;
+						var url = db.proto + db.host + ':' +
+							  db.port + '/_users/' + usrtmp.doc._id +
+							  '?rev=' + rev;
+					
+						var client = Ti.Network.createHTTPClient({
+							onload: function(data){
+								usrtmp.set(user);
+								usrtmp.isConfigured();
+								/*console.log("Utente registrato con successo! " +data);*/
+								if (callback) {
+									callback(undefined, data);
+								}
+							},
+							onerror: function(e){
+								/*console.log("Utente NON registrato! " + jqXHR + textStatus + errorThrown);*/
+								if (callback){
+									callback(e, undefined);
+								}
+							}
+						});
+						client.open("PUT", url);
+				
+						client.setRequestHeader("Authorization", 'Basic ' + db.admin.base64);
+						client.setRequestHeader("Content-Type", "application/json");
+						
+						var userupdate = {
+							 name: usrtmp.doc.name,
+							 password: usrtmp.doc.password,
+							 nick: user.nick,
+							 mail: user.mail,
+							 type: usrtmp.doc.type,
+							 roles: usrtmp.doc.roles
+						};
+						client.send(JSON.stringify(userupdate));
+					}else{
+						if (callback){
+							callback(err, undefined);
+						}
+					}
+				});
+				console.log("NUOVO THIS");
+				console.log(this);
+			}
 	}
 };
 /**

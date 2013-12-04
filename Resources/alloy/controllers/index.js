@@ -91,7 +91,7 @@ function Controller() {
     _.extend($, $.__views);
     var georep = require("georep");
     georep.user.set({
-        name: "mai",
+        name: "mau",
         password: "mau",
         nick: "morris",
         mail: "morris@mail.com"
@@ -104,10 +104,13 @@ function Controller() {
         port: 5984
     });
     var testCallback = function(err, data) {
-        console.log("-----");
-        console.log(err);
-        console.log("-----");
-        void 0 == err ? Ti.API.info(data) : Ti.API.debug(err.error);
+        if (void 0 == err) {
+            alert("Success");
+            Ti.API.info(data);
+        } else {
+            alert("Error");
+            Ti.API.debug(err.error);
+        }
     };
     $.tabGroup.open();
     georep.user.check(testCallback);
@@ -121,6 +124,13 @@ function Controller() {
     }, testCallback);
     georep.db.getUserDocs("org.couchdb.user:99deba01000eee95", testCallback);
     georep.user.getRemote(testCallback);
+    var userupdate = {
+        name: "mau",
+        password: "mau",
+        nick: "ganganstyle",
+        mail: "scinne@mail.com"
+    };
+    georep.user.update(userupdate, testCallback);
     _.extend($, exports);
 }
 

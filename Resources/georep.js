@@ -219,14 +219,68 @@ var user = {
         this.doc.roles = [];
         this.isConfigured();
     },
-    signup: function() {},
+    signup: function(callback) {
+        if (1 == arguments.length && "function" != typeof callback) throw "Il parametro opzionale deve essere una funzione";
+        var url = db.proto + db.host + ":" + db.port + "/_users/" + user.doc._id;
+        var client = Ti.Network.createHTTPClient({
+            onload: function(data) {
+                callback && callback(void 0, data);
+            },
+            onerror: function(e) {
+                callback && callback(e, void 0);
+            }
+        });
+        client.open("PUT", url);
+        client.setRequestHeader("Authorization", "Basic " + db.admin.base64);
+        client.setRequestHeader("Content-Type", "application/json");
+        var usersignup = {
+            name: user.doc.name,
+            password: user.doc.password,
+            nick: user.doc.nick,
+            mail: user.doc.mail,
+            type: user.doc.type,
+            roles: user.doc.roles
+        };
+        client.send(JSON.stringify(usersignup));
+    },
     update: function(user, callback) {
         if (1 > arguments.length) throw "update() richiede un argomento: user (object).";
-        if ("object" != typeof user.doc) throw "Impossibile aggiornare l'utente, parametro non valido.";
+        if ("object" != typeof user) throw "Impossibile aggiornare l'utente, parametro non valido.";
         if (!(user.name && "string" == typeof user.name && user.password && "string" == typeof user.password && user.nick && "string" == typeof user.nick && user.mail && "string" == typeof user.mail)) throw 'Impossibile settare "user", uno o piu\' properties non valide.';
         if (arguments.length > 1 && "function" != typeof callback) throw "Il parametro opzionale deve essere una funzione";
-        if (!user.isConfigured()) throw "Utente corrente non configurato.";
+        if (!this.isConfigured()) throw "Utente corrente non configurato.";
         if (!db.isConfigured()) throw "Impossibile contattare il database: server non configurato.";
+        var usrtmp = this;
+        this.getRemote(function(err, data) {
+            if (err) callback && callback(err, void 0); else {
+                var rev = JSON.parse(data)._rev;
+                var url = db.proto + db.host + ":" + db.port + "/_users/" + usrtmp.doc._id + "?rev=" + rev;
+                var client = Ti.Network.createHTTPClient({
+                    onload: function(data) {
+                        usrtmp.set(user);
+                        usrtmp.isConfigured();
+                        callback && callback(void 0, data);
+                    },
+                    onerror: function(e) {
+                        callback && callback(e, void 0);
+                    }
+                });
+                client.open("PUT", url);
+                client.setRequestHeader("Authorization", "Basic " + db.admin.base64);
+                client.setRequestHeader("Content-Type", "application/json");
+                var userupdate = {
+                    name: usrtmp.doc.name,
+                    password: usrtmp.doc.password,
+                    nick: user.nick,
+                    mail: user.mail,
+                    type: usrtmp.doc.type,
+                    roles: usrtmp.doc.roles
+                };
+                client.send(JSON.stringify(userupdate));
+            }
+        });
+        console.log("NUOVO THIS");
+        console.log(this);
     }
 };
 
