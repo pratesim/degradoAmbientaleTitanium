@@ -641,8 +641,6 @@ var user = {
 						}
 					}
 				});
-				console.log("NUOVO THIS");
-				console.log(this);
 			}
 	}
 };
