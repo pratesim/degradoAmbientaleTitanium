@@ -183,7 +183,23 @@ var user = {
         client.setRequestHeader("Authorization", "Basic " + user.doc.base64);
         client.send();
     },
-    getRemote: function() {},
+    getRemote: function(callback) {
+        if (1 != arguments.length) throw "getRemote() richiede un argomento: callback (function(err, data)).";
+        if ("function" != typeof callback) throw "Parametro non valido: callback deve essere 'function'.";
+        var url = db.proto + db.host + ":" + db.port + "/_users/" + user.doc._id;
+        var client = Ti.Network.createHTTPClient({
+            onload: function() {
+                callback(void 0, this.responseText);
+            },
+            onerror: function(e) {
+                callback(e, void 0);
+            }
+        });
+        client.open("GET", url);
+        client.setRequestHeader("Authorization", "Basic " + user.doc.base64);
+        client.setRequestHeader("Accept", "application/json");
+        client.send();
+    },
     isConfigured: function() {
         if (this.doc.configured) return true;
         this.doc.configured = void 0 != this.doc._id && void 0 != this.doc.base64 && void 0 != this.doc.mail && void 0 != this.doc.name && void 0 != this.doc.nick && void 0 != this.doc.password && void 0 != this.doc.roles && void 0 != this.doc.type;

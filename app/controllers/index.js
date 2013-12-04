@@ -14,7 +14,10 @@ georep.db.setURLServer({
 	port: 5984
 });
 var testCallback = function (err, data){
-		if (!err){
+		console.log("-----");
+		console.log(err);
+		console.log("-----");
+		if (err == undefined){
 			Ti.API.info(data);
 		}
 		else {
@@ -28,6 +31,7 @@ georep.user.check(testCallback);
 georep.db.getDoc("6eeccb20fb0aae3a637e2b359d0003af", false, testCallback);
 georep.db.getDocsInBox({lng: 10.244354, lat: 43.78324}, {lng: 10.424255, lat: 43.928314}, testCallback);
 georep.db.getUserDocs("org.couchdb.user:99deba01000eee95", testCallback);
+/* la postDoc è già stata testata, non la testo più altrimenti vengono aggiunti troppi doc al db inutilmente 
 var doc = {
 	title: "test Titanium",
 	msg: "provo con Titanium a postare un doc",
@@ -40,4 +44,5 @@ var doc = {
 		longitude: 10.28766
 	}
 };
-georep.db.postDoc(doc, testCallback);
+georep.db.postDoc(doc, testCallback);*/
+georep.user.getRemote(testCallback);

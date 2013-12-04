@@ -391,7 +391,7 @@ var user = {
 	 *        data: true se l'utente è già registrato, false se non lo è .
 	 */
 	check: function(callback){
-		/* callback è obbligatorio perchè checkUser() chiama $.ajax() che è asincrona */
+		/* callback è obbligatorio perchè checkUser() esegue una richiesta asincrona */
 			if( arguments.length != 1 || typeof callback != 'function'){
 				throw 'checkUser() richiede un argomento: callback (function(err, data)).';	
 			} else if (!this.isConfigured()){
@@ -446,7 +446,29 @@ var user = {
 	 *              }
 	 */
 	getRemote: function(callback){
-		// TODO
+		/* callback è obbligatorio perchè getRemote usa una funzione è asincrona */
+		if( arguments.length != 1){
+			throw 'getRemote() richiede un argomento: callback (function(err, data)).';	
+		} else if (typeof callback != 'function'){
+			throw 'Parametro non valido: callback deve essere \'function\'.';
+		} else {
+			var url = db.proto + db.host + ':' +
+					  db.port + '/_users/' + user.doc._id;
+			var client = Ti.Network.createHTTPClient({
+				onload: function(data){
+					callback(undefined, this.responseText);
+				},
+				onerror: function(e){
+					callback(e, undefined);
+				}
+			});
+			client.open("GET", url);
+			
+			client.setRequestHeader("Authorization", 'Basic ' + user.doc.base64);
+			client.setRequestHeader("Accept", 'application/json');
+			
+			client.send();
+			}
 	},
 	/**
 	 * controlla se tutte le properties dell'user sono state configurate e ritorna
