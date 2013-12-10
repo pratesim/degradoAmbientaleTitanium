@@ -1,658 +1,726 @@
-/** Libreria per interagire con un server couchdb esteso con geocouch **/
+
+/** -- USER ----------------------------------------------------------------- */
 
 /**
- * sezione relativa a costanti utilizzate nel resto del codice
+ * Costruttore dell'oggetto User.
+ * Definisce l'utente locale che utilizzera' il database remoto.
+ * 
+ * userConf (object) : cofigurazioni per istanziare un nuovo utente.
+ *     {
+ * 	        name:     < username dell'utente >             (string),
+ *          password: < password dell'utente >             (string),
+ *          nick:     < nick name utilizzato dall'utente > (string),
+ *          mail:     <indirizzo e-mail dell'utente >      (string)
+ *     }
  */
-var constants = {
-	/* vettore contenente l'elenco dei designDoc usati */
-	designDocs: [
-		{
-			name: 'queries', /* nome di questo design document */
-			handlers: [ /* vettore dei gestori delle diverse views */
-				{
-					name: '_view', /* gestore delle views map-reduce */
-					views: ['allDocsByUser'] /* elenco delle views gestite da questo gestore */
-				},
-				{
-					name: '_spatial', /* gestore delle views spaziali di geocouch */
-					views: ['allDocsByLoc'] /* elenco delle views spaziali */
-				}
-			]
-		}
-	]
+var User = function (userConf) {
+	if (userConfValidator(userConf)){
+		this._id = 'org.couchdb.user:' + userConf.name;
+		this.name = userConf.name;
+		this.password = userConf.password;
+		this.type = 'user';
+		this.roles = [];
+		this.nick = userConf.nick;
+		this.mail = userConf.mail;
+		this.base64 = Ti.Utils.base64encode(userConf.name + ':' + userConf.password).text;
+	}
+};
+
+/**
+ * Aggiorna localmente le configurazioni di un utente.
+ * 
+ * newUserConf (object) : nuove cofigurazioni per l'utente.
+ *     {
+ * 	        name:     < username dell'utente >             (string),
+ *          password: < password dell'utente >             (string),
+ *          nick:     < nick name utilizzato dall'utente > (string),
+ *          mail:     <indirizzo e-mail dell'utente >      (string)
+ *     }
+ * 
+ * Ritorna un oggetto con le vecchie configurazioni.
+ */
+User.prototype.update = function(newUserConf){
+	var oldUserConf = {
+		name: this.name,
+		password: this.password,
+		nick: this.nick,
+		mail: this.name
+	};
+	if (userConfValidator(newUserConf)){
+		this._id = 'org.couchdb.user:' + newUserConf.name;
+		this.name = newUserConf.name;
+		this.password = newUserConf.password;
+		this.type = 'user';
+		this.roles = [];
+		this.nick = newUserConf.nick;
+		this.mail = newUserConf.mail;
+		this.base64 = Ti.Utils.base64encode(newUserConf.name + ':' + newUserConf.password).text;
+		return oldUserConf;
+	}
+};
+
+exports.User = User;
+
+/** -- Funzioni ausiliare per USER */
+
+/**
+ * Verifica la correttezza delle configurazioni per User
+ */
+var userConfValidator = function (uc) {
+	if (!uc)
+		throw {
+			error: 'a userConf object is required',
+			userConf: uc
+		};
+	else if (!uc.name     || typeof uc.name     != 'string' ||
+	         !uc.password || typeof uc.password != 'string' ||
+	         !uc.nick     || typeof uc.nick     != 'string' ||
+	         !uc.mail     || typeof uc.mail     != 'string'   )
+		throw {
+			error: 'some userConf properties are invalid',
+			userConf: uc
+		};
+	else
+		return true;
 };
 
 
 
 
+/** -- DB ------------------------------------------------------------------- */
 
 /**
- * sezione relativa al database remoto
+ * Costruttore per l'oggetto DB
+ * Definisce un database CouchDB remoto.
+ * 
+ * dbConf (object) : configurazioni per istanziare un nuovo database remoto
+ *     {
+ *         proto: < protocollo di comunicazione (http, https, ...) > (string),
+ *         host:  < host name o ip del server >                      (string),
+ *         port:  < porta remota in ascolto >                        (number),
+ *         name:  < nome del database >                              (string),
+ *         admin: < un istanza di Admin >                            (Admin )
+ *     }
  */
-var db = {
-	/* sezione relativa al database remoto */
-	admin: {
-		base64: undefined, /* credenziali dell'amministratore utilizzate per il login sul DB codificate in 'base64' */
-		configured: false  /* indica se l'amministratore e' stato configurato */
-	},
-	configured: false, /* indica se DB e' stato configurato */
-	name: undefined, /* nome del db */
-	host: undefined, /* IP o Hostname della macchin */
-	port: undefined, /* porta sulla quale il server e' in ascolto */
-	proto: undefined, /* protocollo di comunicazione (http://, https://, ecc...) */
-	/**
-	 * controlla se tutte le properties del DB sono state configurate e ritorna
-	 * tale risultato.
-	 */
-	isConfigured: function(){
-		if (this.configured)
-			return true;
-		else {
-			this.configured = (
-				this.admin.configured == true &&
-				this.name  !=  undefined && this.host  != undefined &&
-				this.port  !=  undefined && this.proto != undefined
-			);
-			return this.configured;
-		}
-	},
-	/**
-	 * Setta l'utente amministratore del server.
-	 *
-	 * name ( string ):
-	 * passwd: ( string ):
-	 */
-	setAdmin: function(name, passwd){
-		if (arguments.length != 2) {
-			throw 'setAdmin() richiede esattamente 2 argomenti: name (string), passwd (string).';
-		} else if (!name || !passwd || typeof name != 'string' || typeof passwd != 'string') {
-			throw 'Impossibile settare l\'amministratore, parametri non validi.';
-		} else {
-			db.admin.base64 = Ti.Utils.base64encode(name+':'+passwd).text;
-			db.admin.configured = true;
-			db.isConfigured();
-		}
-	},
-	/**
-	 * Setta il nome del database all'interno del server.
-	 *
-	 * DBName ( string ):
-	 */
-	setDBName: function(DBName){
-		if (arguments.length != 1) {
-			throw 'setDBName() richiede un argomento: DBName (string).';
-		} else if (!DBName || typeof DBName != 'string' ) {
-			throw 'Impossibile settare il nome del database, parametro non valido.';
-		} else {
-			db.name = DBName;
-			db.isConfigured();
-		}
-	},
-	/**
-	 * Configura lo URL del server CouchDB (geocouch)
-	 *
-	 * URLServer ( object ):
-	 *     {
-	 *         proto: "http://",
-	 *         host:  "127.0.0.1",
-	 *         port:  5984
-	 *     }
-	 */
-	setURLServer: function(URLServer){
-		if (arguments.length != 1){
-			throw 'setURLServer() richiede un argomento: URLServer (object).';
-		} else if (typeof URLServer != 'object'){
-			throw 'Impossibile settare "URLServer", parametro non valido.';
-		} else if (
-		!URLServer.proto || typeof URLServer.proto != 'string' ||
-		!URLServer.host  || typeof URLServer.host  != 'string' ||
-		!URLServer.port  || typeof URLServer.port  != 'number' ||
-		URLServer.port < 1 || URLServer.port > 65535){
-			throw 'Impossibile settare "URLServer", uno o piu\' properties non valide.';
-		} else {
-			db.proto = URLServer.proto;
-			db.host = URLServer.host;
-			db.port = URLServer.port;
-			db.isConfigured();
-		}
-	},
-	/**
-	 * Recupera un doc dal database tramite il relativo ID
-	 * 
-	 * docId: (string) "l'ID del documento",
-	 * attachments: (boolean)
-	 *     true  - recupera il documento completo di allegato;
-	 *     false - recupera il semplice documento senza allegato.
-	 * callback ( function(err, data) ):
-	 *     funzione di callback chiamata sia in caso di errore che di successo;
-	 *        err:  oggetto che descrive l'errore, se si e' verificato;
-	 *        data: oggetto che mostra le opzioni settate se non si sono verificati errori.
-	 */ 
-	getDoc: function(docId, attachments, callback){
-		if( arguments.length < 2 )
-				throw 'getDoc() richiede almeno 2 argomenti: docId (string), attachment (boolean).';
-			else if (!docId || typeof docId != 'string' || typeof attachments != 'boolean')
-				throw 'Uno o piu\' parametri non validi.';
-			else {
-				var attach = (attachments)?'?attachments=true':'?attachments=false';
-				var url = db.proto +
-						  db.host + ':' +
-						  db.port + '/' +
-						  db.name + '/' + docId +
-						  attach;
+var DB = function (dbConf) {
+	if (dbConfValidator(dbConf)){
+		this.name  = dbConf.name;
+		this.host  = dbConf.host;
+		this.port  = dbConf.port;
+		this.proto = dbConf.proto;
+		this.admin = dbConf.admin;
+	}
+};
 
-				var client = Ti.Network.createHTTPClient({
-					onload: function(data){
-						//Ti.API.info("Ricevuto: " + this.responseText);
-						//alert("Success");
-						if(callback)
-							// this.responseText contiene la risposta di tipo json
-							callback(undefined,this.responseText);
-					},
-					onerror: function(e){
-						//Ti.API.debug(e.error);
-						//alert("error");
-						if(callback)
-							callback(e,undefined);
-					}
-				});
-				
-				client.open("GET", url);
-				/*Ti.API.debug("user in getDoc");
-				Ti.API.debug(user);
-				Ti.API.debug("----------------");*/
-				client.setRequestHeader("Authorization", "Basic " + user.doc.base64);
-				/* mi assicura che la risposta arrivi con l'allegato in base64
-				           invece che in binario in un oggetto MIME a contenuti multipli
-				*/ 
-				client.setRequestHeader("Accept", "application/json");
-				
-				client.send();
+/**
+ * Ritorna l'URL relativo al server.
+ */
+DB.prototype.getURLServer = function(){
+	return this.proto + '://' + this.host + ':' + this.port;
+};
+
+/**
+ * Ritorna l'URL relativo al database sul server.
+ */
+DB.prototype.getURLDB = function(){
+	return this.proto + '://' + this.host + ':' + this.port + '/' + this.name;
+};
+
+exports.DB = DB;
+
+/** -- Funzioni ausiliare per DB */
+
+/**
+ * Verifica la correttezza delle configurazioni per DB
+ */
+var dbConfValidator = function (dbc) {
+	if (!dbc)
+		throw {
+			error: 'a dbConf object is required',
+			dbConf: dbc
+		};
+	else if (!dbc.name  || typeof dbc.name  != 'string'   ||
+	         !dbc.host  || typeof dbc.host  != 'string'   ||
+	         !dbc.proto || typeof dbc.proto != 'string'   ||
+	         !dbc.admin || !(dbc.admin instanceof Admin)  ||
+	         !dbc.port  || typeof dbc.port  != 'number'   || dbc.port <= 0 || dbc.port >= 65536)
+		throw {
+			error: 'some dbConf properties are invalid',
+			dbConf: dbc
+		};
+	else
+		return true;
+};
+
+
+
+
+/** -- ADMIN ---------------------------------------------------------------- */
+
+/**
+ * Costruttore per l'oggetto Admin.
+ * Definisce le credeziali di accesso per amministrase un DB remoto.
+ * 
+ * adminConf (object) : configurazioni per istanziare un nuovo admin
+ *     {
+ * 	        name:     < nome utente amministratore >   (string),
+ *          password: < password dell'amministratore > (string)
+ *     }
+ */
+var Admin = function (adminConf) {
+	if (adminConfValidator(adminConf))
+		this.base64 = Ti.Utils.base64encode(adminConf.name + ':' + adminConf.password).text;
+};
+
+exports.Admin = Admin;
+
+/** -- Funzioni ausiliare per ADMIN */
+
+/**
+ * Verifica la correttezza delle configurazioni per Admin
+ */
+var adminConfValidator = function (ac) {
+	if (!ac)
+		throw {
+			error: 'a adminConf object is required',
+			adminConf: ac
+		};
+	else if (!ac.name      || typeof ac.name      != 'string' ||
+	         !ac.password  || typeof ac.password  != 'string'  )
+		throw {
+			error: 'some adminConf properties are invalid',
+			georepConf: ac
+		};
+	else
+		return true;
+};
+
+
+
+
+/** -- GEOREP --------------------------------------------------------------- */
+
+/**
+ * Costruttore per l'oggetto Georep.
+ * 
+ * Permette ad un utente 'user' di interfacciarsi con un 'db' database CouchDB
+ * remoto esteso con Geocouch.
+ * 
+ * georepConf (object) : oggetto con le configurazioni per inizializzare l'interfaccia
+ *     {
+ *         db:   < un istanza di DB >   (DB  ),
+ *         user: < un istanza di User > (User)
+ *     }
+ */
+var Georep = function (georepConf) {
+	if (georepConfValidator(georepConf)){
+		this.db = georepConf.db;
+		this.user = georepConf.user;
+	}
+};
+
+/**
+ * Recupera un doc dal database tramite il relativo ID
+ * 
+ * docId: (string) "l'ID del documento",
+ * attachments: (boolean)
+ *     true  - recupera il documento completo di allegato;
+ *     false - recupera il semplice documento senza allegato.
+ * callback ( function(err, data) ):
+ *     funzione di callback chiamata sia in caso di errore che di successo;
+ *        err:  oggetto che descrive l'errore, se si e' verificato;
+ *        data: oggetto che mostra le opzioni settate se non si sono verificati errori.
+ */ 
+Georep.prototype.getDoc = function(docId, attachments, callback){
+	if( arguments.length < 2 )
+		throw {
+			error: 'getDoc() richiede almeno 2 argomenti: docId (string), attachment (boolean).',
+			args: arguments
+		};
+	else if (!docId || typeof docId != 'string' || typeof attachments != 'boolean')
+		throw {
+			error: 'Uno o piu\' parametri non validi.',
+			args: arguments
+		};
+	else if (callback && typeof callback != 'function'){
+		throw {
+			error: 'callback deve essere una funzione.',
+			args: arguments
+		};
+	} else {
+		var attach = (attachments)?'?attachments=true':'?attachments=false';
+		var url = this.db.getURLDB() + '/' + docId + attach;
+
+		var client = Ti.Network.createHTTPClient({
+			onload: function(data){
+				if(callback)
+					// this.responseText contiene la risposta di tipo json
+					callback(undefined,this.responseText);
+			},
+			onerror: function(e){
+				if(callback)
+					callback(e,undefined);
 			}
-	},
-	/**
-	 * Chiede al DB tutti i documenti che sono posizionati in una certa area
-	 * rettangolare.
-	 *
-	 * bl_corner (object): coordinate del vertice in basso a sinistra del
-	 *     rettangolo.
-	 * tr_corner (object): coordinate del vertice in alto a destra del
-	 *     rettangolo.
-	 * callback ( function(err, data) ): funzione chiamata al termine della
-	 *     richiesta al server. In caso di errore, 'err' contiene un oggetto
-	 *     che descrive l'errore altrimenti 'data' contiene il risultato
-	 *     della query.
-	 *
-	 * entrambi i vertici sono oggetti del tipo:
-	 *     {
-	 *         lng: (number),
-	 *         lat: (number)
-	 *     }
-	 */
-	getDocsInBox: function(bl_corner, tr_corner, callback){
+		});
+		
+		client.open("GET", url);
+		client.setRequestHeader("Authorization", "Basic " + this.user.base64);
+		/**
+		 * mi assicura che la risposta arrivi con l'allegato in base64
+		 * invece che in binario in un oggetto MIME a contenuti multipli
+		 */
+		client.setRequestHeader("Accept", "application/json");
+		client.send();
+	}
+};
+/**
+ * Chiede al DB tutti i documenti che sono posizionati in una certa area
+ * rettangolare.
+ *
+ * bl_corner (object): coordinate del vertice in basso a sinistra del
+ *     rettangolo.
+ * tr_corner (object): coordinate del vertice in alto a destra del
+ *     rettangolo.
+ * callback ( function(err, data) ): funzione chiamata al termine della
+ *     richiesta al server. In caso di errore, 'err' contiene un oggetto
+ *     che descrive l'errore altrimenti 'data' contiene il risultato
+ *     della query.
+ *
+ * entrambi i vertici sono oggetti del tipo:
+ *     {
+ *         lng: (number),
+ *         lat: (number)
+ *     }
+ */
+Georep.prototype.getDocsInBox = function(bl_corner, tr_corner, callback){
+	if (arguments.length < 2)
+		throw {
+			error: 'getDocsInBox() richiede due argomenti: bl_corner (object), tr_corner (object).',
+			args: arguments
+		};
+	else if (!mapPointValidator(bl_corner) || !mapPointValidator(tr_corner))
+		throw {
+			error: 'Uno o piu\' parametri non validi.',
+			args: arguments
+		};
+	else if (arguments.length > 2 && typeof callback != 'function')
+		throw {
+			error: 'Parametro opzionale non valido: callback.',
+			args: arguments
+		};
+	else {
 		var viewPath = constants.designDocs[0].name + '/' +
-			               constants.designDocs[0].handlers[1].name + '/' +
-			               constants.designDocs[0].handlers[1].views[0];
+		               constants.designDocs[0].handlers[1].name + '/' +
+		               constants.designDocs[0].handlers[1].views[0];
 		var queryOpts = '?bbox=' +
-			                bl_corner.lng + ',' + bl_corner.lat + ',' +
-			                tr_corner.lng + ',' + tr_corner.lat;
+		                bl_corner.lng + ',' + bl_corner.lat + ',' +
+		                tr_corner.lng + ',' + tr_corner.lat;
+		                
+		var url = this.db.getURLDB() + '/_design/' + viewPath + queryOpts;
 		
-		if (arguments.length < 2)
-			throw 'getDocsInBox() richiede due argomenti: bl_corner (object), tr_corner (object).';
-		else if (typeof bl_corner != 'object' || typeof tr_corner != 'object')
-			throw 'Uno o piu\' parametri non validi: devono essere \'object\'.';
-		else if (
-		!bl_corner.lng || typeof bl_corner.lng != 'number'|| bl_corner.lng < -180 || bl_corner.lng > 180 ||
-		!bl_corner.lat || typeof bl_corner.lat != 'number'|| bl_corner.lat <  -90 || bl_corner.lat >  90  )
-			throw 'Parametro non valido: bl_corner.';
-		else if (
-		!tr_corner.lng || typeof tr_corner.lng != 'number'|| tr_corner.lng < -180 || tr_corner.lng > 180 ||
-		!tr_corner.lat || typeof tr_corner.lat != 'number'|| tr_corner.lat <  -90 || tr_corner.lat >  90  )
-			throw 'Parametro non valido: tr_corner.';
-		else if (arguments.length > 2 && (!callback || typeof callback != 'function'))
-			throw 'Parametro opzionale non valido: callback.';
-		else if (!db.isConfigured())
-			throw 'Impossibile contattare il database: db non cofigurato';
-		else if (!user.isConfigured())
-			throw 'Impossibile inviare la richiesta al server da un utente non configurato.';
-		else {
-			var url = db.proto + db.host + ':' + db.port + '/' +
-					  db.name + '/_design/' + viewPath + queryOpts;
-			var client = Ti.Network.createHTTPClient({
-				onload: function(data){
-					//Ti.API.info(this.responseText);
-					if(callback)
-						callback(undefined, this.responseText);
-				},
-				onerror: function(e){
-					//Ti.API.debug(e.error);
-					if(callback)
-						callback(e,undefined);
-				}
-			});
-			client.open("GET", url);
-			
-			client.setRequestHeader("Authorization", 'Basic ' + user.doc.base64);
-			client.setRequestHeader("Accept", 'application/json');
-			
-			client.send();
-		}
-	},
-	/**
-	 * Chiede al DB tutti gli ID dei documenti creati da un utente.
-	 *
-	 * userId (string): identificatore unico di un utente.
-	 * callback ( function(err, data) ): funzione chiamata al termine della
-	 *     richiesta al server. In caso di errore, 'err' contiene un oggetto
-	 *     che descrive l'errore altrimenti 'data' contiene il risultato
-	 *     della query.
-	 */
-	getUserDocs: function(userId, callback){
-		var viewPath = constants.designDocs[0].name + '/' +
-			           constants.designDocs[0].handlers[0].name + '/' +
-			           constants.designDocs[0].handlers[0].views[0];
-		var queryOpts = '?key="' + userId + '"';
-		
-		if (arguments.length < 1)
-			throw 'getUserDocs() richiede almeno un argomento: userId (string).';
-		else if (!userId || typeof userId != 'string')
-			throw 'parametro non valido: userId deve essere una stringa non vuota.';
-		else if (arguments.length > 1 && typeof callback != 'function')
-			throw 'parametro opzionale non valido: callback deve essere una funzione.';
-		else if (!db.isConfigured())
-			throw 'Impossibile contattare il database: db non cofigurato';
-		else if (!user.isConfigured())
-			throw 'Impossibile inviare la richiesta al server da un utente non configurato.';
-		else {
-			var url = db.proto + db.host + ':' + db.port + '/' +
-					  db.name + '/_design/' + viewPath + queryOpts;
-			var client = Ti.Network.createHTTPClient({
-				onload: function(data){
-					if(callback)
-						callback(undefined, this.responseText);
-				},
-				onerror: function(e){
-					if(callback)
-						callback(e,undefined);
-				}
-			});
-			client.open("GET", url);
-			
-			client.setRequestHeader("Authorization", 'Basic ' + user.doc.base64);
-			client.setRequestHeader("Accept", 'application/json');
-			
-			client.send();
-		}
-	},
-	/**
-	 * Invia un nuovo documento sul database remoto
-	 * 
-	 * doc (object) :
-	 *     {
-	 *         title: (string) "titolo del documento",
-	 *         msg: (string) "qualche dettaglio in piu'",
-	 *         img: (object) {
-	 *                           content_type: "image/...",
-	 *                           data: "... data in base64 ..."
-	 *                       }
-	 *         loc: (object) {
-	 *                           latitude:  (number) latitudine nord,
-	 *                           longitude: (number) longitudine est
-	 *                       }
-	 *     }
-	 * callback ( function(err, data) ):
-	 *     funzione di callback chiamata sia in caso di errore che di successo;
-	 *        err:  oggetto che descrive l'errore, se si e' verificato;
-	 *        data: oggetto che mostra le opzioni settate se non si sono verificati errori.
-	 */ 
-	postDoc: function(doc,callback){
-			if( arguments.length < 1 )
-				throw 'postDoc() richiede almeno 1 argomento: doc (object).';
-			else if ( typeof doc != 'object' ||
-			!doc.title || typeof doc.title != 'string' ||
-			!doc.msg   || typeof doc.msg   != 'string' ||
-			!doc.img   || typeof doc.img   != 'object' ||
-			!doc.img.content_type || typeof doc.img.content_type != 'string' ||
-			!doc.img.data         || typeof doc.img.data         != 'string' ||
-			!doc.loc || typeof doc.loc != 'object' ||
-			!doc.loc.latitude  || typeof doc.loc.latitude  != 'number' || doc.loc.latitude  >  90 || doc.loc.latitude  <  -90 ||
-			!doc.loc.longitude || typeof doc.loc.longitude != 'number' || doc.loc.longitude > 180 || doc.loc.longitude < -180 ){
-				throw 'Parametro "doc" non valido.';
-			} else {
-				var newDoc = {};
-				newDoc.userId = user.doc._id;
-				newDoc.title = doc.title;
-				newDoc.msg = doc.msg;
-				newDoc.loc = doc.loc;
-				newDoc._attachments = {
-					img: doc.img
-				};
-				var url = db.proto + db.host + ':' +
-						  db.port + '/' + db.name;
-				var client = Ti.Network.createHTTPClient({
-					onload: function(data){
-						if(callback)
-							callback(undefined,data);
-					},
-					error: function(e){
-						if(callback)
-							callback(e,undefined);
-					}
-				});
-				client.open("POST", url);
-				
-				client.setRequestHeader("Authorization", 'Basic ' + user.doc.base64);
-				client.setRequestHeader("Content-Type", "application/json");
-				
-				client.send(JSON.stringify(newDoc));
-			}
-		}
-};
-/**
- * rendo pubbliche solo le funzioni relative al DB così si proteggono le configurazioni.
- */
-exports.db = {
-	isConfigured: db.isConfigured,
- 	setAdmin: db.setAdmin,
- 	setDBName: db.setDBName,
- 	setURLServer: db.setURLServer,
- 
- 	getDoc: db.getDoc,
- 	getDocsInBox: db.getDocsInBox,
- 	getUserDocs: db.getUserDocs,
- 	postDoc: db.postDoc
-};
-
-
-
-
-
-/**
- * sezione relativa all'utente che utilizza il DB
- */
-var user = {
-	doc: {
-		_id: undefined, /* identificatore unico associato all'utente */
-		base64: undefined, /* credenziali dell'utente utilizzate per il login sul DB codificate in 'base64' */
-		configured: false, /* indica se l'utente e' stato configurato */
-		mail: undefined, /* indirizzo email dell'utente */
-		name: undefined, /* username utilizzato dall'utente per l'autenticazione sul DB */
-		nick: undefined, /* nickname arbitrariamente scelto dall'utente */
-		password: undefined, /* password usata dall'utente per l'autenticazione sul DB */
-		roles: [], /* ruoli dell'utente sul DB; deve essere [] */
-		type: 'user', /* tipo dell'utente; deve essere 'user' */
-	},
-	/**
-	 * Controlla se un utente è registrato sul server CouchDB (geocouch).
-	 * 
-	 * callback ( function(err, data) ):
-	 * 		funzione di callback, NON OPZIONALE, chiamata sia in caso di errore che di successo;
-	 *         err: oggetto che descrive l'errore, se si è verificato;
-	 *        data: true se l'utente è già registrato, false se non lo è .
-	 */
-	check: function(callback){
-		/* callback è obbligatorio perchè checkUser() esegue una richiesta asincrona */
-			if( arguments.length != 1 || typeof callback != 'function'){
-				throw 'checkUser() richiede un argomento: callback (function(err, data)).';	
-			} else if (!this.isConfigured()){
-				throw 'Impossibile controllare se l\'utente e\' registrato: utente non configurato.';
-			} else if (!db.isConfigured()){
-				throw 'Impossibole controllare se l\'utente e\' registrato: server non configurato.';
-			} else {
-				/* richiedo info sul db, usando come credenziali di accesso quelle dell'utente georep.options.user, 
-				   se l'accesso al db viene negato, significa che l'utente non è registrato */
-				var url = db.proto + db.host + ':' + db.port;
-				var client = Ti.Network.createHTTPClient({
-					onload: function(data){
-						/*console.log("Utente gia' registrato "+ data);*/
-						callback(undefined, {isRegistered: true});
-					},
-					onerror: function(e){
-						//Ti.API.debug(e);
-						if (e.error == '401') {
-							/*console.log("Utente NON registrato");*/
-							callback(undefined, {isRegistered: false});
-						} else {
-							callback(e, undefined);
-						}
-					}
-				});
-				client.open("GET", url);
-				
-				client.setRequestHeader("Authorization", 'Basic ' + user.doc.base64);
-				
-				client.send();
-			}
-	},
-	/** 
-	 * Recupera le informazioni d'utente dal server.
-	 *
-	 * callback ( function(err, data) ):
-	 * 		funzione di callback, NON OPZIONALE, chiamata sia in caso di errore che di successo;
-	 *         err: oggetto che descrive l'errore, se si è verificato;
-	 *        data: (object) le info sull'utente
-	 *              {
-	 *                  _id:             (string)
-	 *                  _rev:            (string)
-	 *                  derived_key:     (string)
-	 *                  iterations:      (number)
-	 *                  mail:            (string)
-	 *                  name:            (string)
-	 *                  nick:            (string)
-	 *                  password_scheme: (string)
-	 *                  roles:           (array)
-	 *                  salt:            (string)
-	 *                  type:            (string)
-	 *              }
-	 */
-	getRemote: function(callback){
-		/* callback è obbligatorio perchè getRemote usa una funzione è asincrona */
-		if( arguments.length != 1){
-			throw 'getRemote() richiede un argomento: callback (function(err, data)).';	
-		} else if (typeof callback != 'function'){
-			throw 'Parametro non valido: callback deve essere \'function\'.';
-		} else {
-			var url = db.proto + db.host + ':' +
-					  db.port + '/_users/' + user.doc._id;
-			var client = Ti.Network.createHTTPClient({
-				onload: function(data){
+		var client = Ti.Network.createHTTPClient({
+			onload: function(data){
+				if(callback)
 					callback(undefined, this.responseText);
+			},
+			onerror: function(e){
+				if(callback)
+					callback(e,undefined);
+			}
+		});
+		client.open("GET", url);
+		client.setRequestHeader("Authorization", 'Basic ' + this.user.base64);
+		client.setRequestHeader("Accept", 'application/json');
+		client.send();
+	}
+};
+/**
+ * Chiede al DB tutti gli ID dei documenti creati da un utente.
+ *
+ * userId (string): identificatore unico di un utente.
+ * callback ( function(err, data) ): funzione chiamata al termine della
+ *     richiesta al server. In caso di errore, 'err' contiene un oggetto
+ *     che descrive l'errore altrimenti 'data' contiene il risultato
+ *     della query.
+ */
+Georep.prototype.getUserDocs = function(userId, callback){
+	var viewPath = constants.designDocs[0].name + '/' +
+		           constants.designDocs[0].handlers[0].name + '/' +
+		           constants.designDocs[0].handlers[0].views[0];
+	var queryOpts = '?key="' + userId + '"';
+	
+	if (arguments.length < 1)
+		throw {
+			error: 'getUserDocs() richiede almeno un argomento: userId (string).',
+			args: arguments
+		};
+	else if (!userId || typeof userId != 'string')
+		throw {
+			error: 'parametro non valido: userId deve essere una stringa non vuota.',
+			args: arguments
+		};
+	else if (arguments.length > 1 && typeof callback != 'function')
+		throw {
+			error: 'parametro opzionale non valido: callback deve essere una funzione.',
+			args: arguments
+		};
+	else {
+		var url = this.db.getURLDB() + '/_design/' + viewPath + queryOpts;
+		var client = Ti.Network.createHTTPClient({
+			onload: function(data){
+				if(callback)
+					callback(undefined, this.responseText);
+			},
+			onerror: function(e){
+				if(callback)
+					callback(e,undefined);
+			}
+		});
+		client.open("GET", url);
+		client.setRequestHeader("Authorization", 'Basic ' + this.user.base64);
+		client.setRequestHeader("Accept", 'application/json');
+		client.send();
+	}
+};
+/**
+ * Invia un nuovo documento sul database remoto
+ * 
+ * doc (object) :
+ *     {
+ *         title: (string) "titolo del documento",
+ *         msg: (string) "qualche dettaglio in piu'",
+ *         img: (object) {
+ *                           content_type: "image/...",
+ *                           data: "... data in base64 ..."
+ *                       }
+ *         loc: (object) {
+ *                           latitude:  (number) latitudine nord,
+ *                           longitude: (number) longitudine est
+ *                       }
+ *     }
+ * callback ( function(err, data) ):
+ *     funzione di callback chiamata sia in caso di errore che di successo;
+ *        err:  oggetto che descrive l'errore, se si e' verificato;
+ *        data: oggetto che mostra le opzioni settate se non si sono verificati errori.
+ */ 
+Georep.prototype.postDoc = function(doc,callback){
+	if( arguments.length < 1 ){
+			throw {
+				error: 'postDoc() richiede almeno 1 argomento: doc (object).',
+				args: arguments
+			};
+		}
+		else if ( typeof doc != 'object' ||
+		!doc.title || typeof doc.title != 'string' ||
+		!doc.msg   || typeof doc.msg   != 'string' ||
+		!doc.img   || typeof doc.img   != 'object' ||
+		!doc.img.content_type || typeof doc.img.content_type != 'string' ||
+		!doc.img.data         || typeof doc.img.data         != 'string' ||
+		!doc.loc || typeof doc.loc != 'object' ||
+		!doc.loc.latitude  || typeof doc.loc.latitude  != 'number' || doc.loc.latitude  >  90 || doc.loc.latitude  <  -90 ||
+		!doc.loc.longitude || typeof doc.loc.longitude != 'number' || doc.loc.longitude > 180 || doc.loc.longitude < -180 ){
+			throw {
+				error: 'Parametro "doc" non valido.',
+				args: arguments
+			};
+		}
+		else if (typeof callback != 'function'){
+			throw {
+				error: 'Il paramentro opzionale deve essere una funzione',
+				args: arguments
+			};
+		}
+		else {
+			var newDoc = {};
+			newDoc.userId = this.user._id;
+			newDoc.title = doc.title;
+			newDoc.msg = doc.msg;
+			newDoc.loc = doc.loc;
+			newDoc._attachments = {
+				img: doc.img
+			};
+			var url = this.db.getURLDB();
+			var client = Ti.Network.createHTTPClient({
+				onload: function(data){
+					if(callback)
+						callback(undefined,data);
 				},
-				onerror: function(e){
+				error: function(e){
+					if(callback)
+						callback(e,undefined);
+				}
+			});
+			client.open("POST", url);
+			
+			client.setRequestHeader("Authorization", 'Basic ' + this.user.base64);
+			client.setRequestHeader("Content-Type", "application/json");
+			
+			client.send(JSON.stringify(newDoc));
+		}
+};
+/**
+ * Controlla se un utente è registrato sul server CouchDB (geocouch).
+ * 
+ * callback ( function(err, data) ):
+ *                 funzione di callback, NON OPZIONALE, chiamata sia in caso di errore che di successo;
+ *         err: oggetto che descrive l'errore, se si è verificato;
+ *        data: true se l'utente è già registrato, false se non lo è .
+ */
+Georep.prototype.checkRemoteUser = function(callback){
+	/* callback è obbligatorio perchè checkUser() esegue una richiesta asincrona */
+	if( arguments.length != 1 || typeof callback != 'function'){
+		throw {
+			error: 'checkUser() richiede un argomento: callback (function(err, data)).',
+			args: arguments
+		};	
+	} else {
+		/* richiedo info sul db, usando come credenziali di accesso quelle dell'utente locale, 
+		   se l'accesso al db viene negato, significa che l'utente non è registrato
+		 */
+		var url = this.db.getURLServer();
+		var client = Ti.Network.createHTTPClient({
+			onload: function(data){
+				callback(undefined, {isRegistered: true});
+			},
+			onerror: function(e){
+				if (e.error == '401') {
+					callback(undefined, {isRegistered: false});
+				} else {
 					callback(e, undefined);
 				}
-			});
-			client.open("GET", url);
-			
-			client.setRequestHeader("Authorization", 'Basic ' + user.doc.base64);
-			client.setRequestHeader("Accept", 'application/json');
-			
-			client.send();
 			}
-	},
-	/**
-	 * controlla se tutte le properties dell'user sono state configurate e ritorna
-	 * tale risultato.
-	 */
-	isConfigured: function(){
-		if (this.doc.configured)
-			return true;
-		else {
-			this.doc.configured = (
-				this.doc._id != undefined  && this.doc.base64 != undefined &&
-				this.doc.mail != undefined && this.doc.name != undefined &&
-				this.doc.nick != undefined && this.doc.password != undefined &&
-				this.doc.roles != undefined && this.doc.type != undefined
-			);
-			return this.doc.configured;
-		}
-	},
-	/**
-	 * Configura l'utente client.
-	 * 
-	 * user ( object ):
-	 *     {
-	 *         name:     (string) nome utilizzato per il login,
-	 *         password: (string) password utlizzata per il login,
-	 *         nick:     (string) nome arbitrario scelto dall'utente,
-	 *         mail:     (string) indirizzo e-mail dell'utente
-	 *     }
-	 */ 
-	set: function(user){
-		if (arguments.length != 1){
-			throw 'setUser() richiede un argomento: user (object).';
-		} else if (typeof user != 'object') {
-			throw 'Impossibile settare "user", parametro non valido.';
-		} else if (
-		!user.name      || typeof user.name      != 'string' ||
-		!user.password  || typeof user.password  != 'string' ||
-		!user.nick      || typeof user.nick      != 'string' ||
-		!user.mail      || typeof user.mail      != 'string' ){
-			throw 'Impossibile settare "user", uno o piu\' properties non valide.';
-		} else {
-			this.doc._id  = 'org.couchdb.user:'+user.name;
-			this.doc.name = user.name;
-			this.doc.password = user.password;
-			this.doc.base64 = Ti.Utils.base64encode(user.name+':'+user.password).text;
-			this.doc.nick = user.nick;
-			this.doc.mail = user.mail;
-			this.doc.type = 'user';
-			this.doc.roles = [];
-			this.isConfigured();
-			/*Ti.API.debug("User settato: ");
-			Ti.API.debug(user.doc);
-			Ti.API.debug("----------------");*/
-		}
-	},
-	/**
-	 * Registra l'utente sul server CouchDB(questa funzione dovrà essere fatta poi dal server direttamente)
-	 *
-	 * callback ( function(err, data) ):
-	 *     funzione di callback chiamata sia in caso di errore che di successo;
-	 *        err:  oggetto che descrive l'errore, se si e' verificato;
-	 *        data: oggetto che mostra il messaggio ricevuto se non si sono verificati errori.
-	 */
-	signup: function(callback){
-			if( arguments.length == 1 && typeof callback != 'function' ) {
-				throw 'Il parametro opzionale deve essere una funzione';
-			} else {
-				var url = db.proto + db.host + ':' +
-						  db.port + '/_users/' + user.doc._id;
-						  
+		});
+		client.open("GET", url);
+		client.setRequestHeader("Authorization", 'Basic ' + this.user.base64);
+		client.send();
+	}
+};
+/**
+ * Registra l'utente sul server CouchDB(questa funzione dovrà essere fatta poi dal server direttamente)
+ *
+ * callback ( function(err, data) ):
+ *     funzione di callback chiamata sia in caso di errore che di successo;
+ *         err: oggetto che descrive l'errore, se si e' verificato;
+ *        data: oggetto che mostra il messaggio ricevuto se non si sono verificati errori.
+ */
+Georep.prototype.signupRemoteUser = function(callback){
+	if( arguments.length == 1 && typeof callback != 'function' ) {
+					throw {
+						error: 'Il parametro opzionale deve essere una funzione',
+						args: arguments
+					};
+	} else {
+		var url = this.db.getURLServer() + '/_users/' + this.user._id;
+		Ti.API.debug(url);		  
+		var client = Ti.Network.createHTTPClient({
+			onload: function(data){
+				/*console.log("Utente registrato con successo! " +data);*/
+				if (callback) {
+					callback(undefined, data);
+				}
+			},
+			onerror: function(e){
+				/*console.log("Utente NON registrato! " + e.err);*/
+				if (callback){
+					callback(e, undefined);
+				}
+			}
+		});
+		client.open("PUT", url);
+		
+		client.setRequestHeader("Authorization", 'Basic ' + this.db.admin.base64);
+		client.setRequestHeader("Content-Type", "application/json");
+		
+		var usersignup = {
+			 name: this.user.name,
+			 password: this.user.password,
+			 nick: this.user.nick,
+			 mail: this.user.mail,
+			 type: this.user.type,
+			 roles: this.user.roles
+		};
+		client.send(JSON.stringify(usersignup));
+		
+	}
+};
+/**
+ * Aggiorna l'utente corrente sia in locale che sul DB.
+ *
+ * user (object): 
+ * 		{
+ *          nick:     < nick name utilizzato dall'utente > (string),
+ *          mail:     <indirizzo e-mail dell'utente >      (string)
+ *     }
+ * callback ( function(err, data) ):
+ *     funzione di callback chiamata sia in caso di errore che di successo;
+ *         err: oggetto che descrive l'errore, se si e' verificato;
+ *        data: oggetto che mostra il messaggio ricevuto se non si sono verificati errori.
+ */
+Georep.prototype.updateRemoteUser = function(user, callback){
+		if (arguments.length < 1){
+		throw {
+			error: 'update() richiede un argomento: user (object).',
+			args: arguments
+		};
+	} else if (typeof user != 'object') {
+		throw {
+			error: 'Impossibile aggiornare l\'utente, parametro non valido.',
+			args: arguments
+		};
+	} else if (
+	!user.nick      || typeof user.nick      != 'string' ||
+	!user.mail      || typeof user.mail      != 'string' ){
+		throw {
+			error: 'Impossibile settare "user", uno o piu\' properties non valide.',
+			args: arguments
+		};
+	} else if (arguments.length > 1 && typeof callback != 'function') {
+		throw {
+			error: 'Il parametro opzionale deve essere una funzione',
+			args: arguments
+		};
+	} else {
+		var tmpService = this; // serve perchè dentro la funzione di callback this è window anzichè Georep
+		this.getRemoteUser(function(err,data){					
+			if(!err){
+				var rev = JSON.parse(data)._rev;
+				var url = tmpService.db.getURLServer() + '/_users/' + tmpService.user._id +
+					  '?rev=' + rev;
+				
 				var client = Ti.Network.createHTTPClient({
 					onload: function(data){
-						/*console.log("Utente registrato con successo! " +data);*/
+						tmpService.user.update(user);
 						if (callback) {
 							callback(undefined, data);
 						}
 					},
 					onerror: function(e){
-						/*console.log("Utente NON registrato! " + jqXHR + textStatus + errorThrown);*/
 						if (callback){
 							callback(e, undefined);
 						}
 					}
 				});
 				client.open("PUT", url);
-				
-				client.setRequestHeader("Authorization", 'Basic ' + db.admin.base64);
+		
+				client.setRequestHeader("Authorization", 'Basic ' + tmpService.db.admin.base64);
 				client.setRequestHeader("Content-Type", "application/json");
 				
-				var usersignup = {
-					 name: user.doc.name,
-					 password: user.doc.password,
-					 nick: user.doc.nick,
-					 mail: user.doc.mail,
-					 type: user.doc.type,
-					 roles: user.doc.roles
-				};
-				client.send(JSON.stringify(usersignup));
+				user.type = tmpService.user.type;
+				user.roles = tmpService.user.roles;
+				user._id = tmpService.user._id;
+				user.name = tmpService.user.name;
+				user.password = tmpService.user.password;
 				
+				client.send(JSON.stringify(user));
+			}else{
+				if (callback){
+					callback(err, undefined);
+				}
 			}
-	},
-	/**
-	 * Aggiorna l'utente corrente sia in locale che sul DB.
-	 *
-	 * user (object): deve essere un utente valido per 'user.set()'
-	 * callback ( function(err, data) ):
-	 *     funzione di callback chiamata sia in caso di errore che di successo;
-	 *        err:  oggetto che descrive l'errore, se si e' verificato;
-	 *        data: oggetto che mostra il messaggio ricevuto se non si sono verificati errori.
-	 */
-	update: function(user, callback){
-			if (arguments.length < 1){
-				throw 'update() richiede un argomento: user (object).';
-			} else if (typeof user != 'object') {
-				throw 'Impossibile aggiornare l\'utente, parametro non valido.';
-			} else if (
-			!user.name      || typeof user.name      != 'string' ||
-			!user.password  || typeof user.password  != 'string' ||
-			!user.nick      || typeof user.nick      != 'string' ||
-			!user.mail      || typeof user.mail      != 'string' ){
-				throw 'Impossibile settare "user", uno o piu\' properties non valide.';
-			} else if (arguments.length > 1 && typeof callback != 'function') {
-					throw 'Il parametro opzionale deve essere una funzione';
-			} else if (!this.isConfigured()) {
-					throw 'Utente corrente non configurato.';
-			} else if (!db.isConfigured()) {
-					throw 'Impossibile contattare il database: server non configurato.';
-			} else {
-				var usrtmp = this;
-				this.getRemote(function(err,data){					
-					if(!err){
-						var rev = JSON.parse(data)._rev;
-						var url = db.proto + db.host + ':' +
-							  db.port + '/_users/' + usrtmp.doc._id +
-							  '?rev=' + rev;
-					
-						var client = Ti.Network.createHTTPClient({
-							onload: function(data){
-								usrtmp.set(user);
-								usrtmp.isConfigured();
-								/*console.log("Utente registrato con successo! " +data);*/
-								if (callback) {
-									callback(undefined, data);
-								}
-							},
-							onerror: function(e){
-								/*console.log("Utente NON registrato! " + jqXHR + textStatus + errorThrown);*/
-								if (callback){
-									callback(e, undefined);
-								}
-							}
-						});
-						client.open("PUT", url);
-				
-						client.setRequestHeader("Authorization", 'Basic ' + db.admin.base64);
-						client.setRequestHeader("Content-Type", "application/json");
-						
-						var userupdate = {
-							 name: usrtmp.doc.name,
-							 password: usrtmp.doc.password,
-							 nick: user.nick,
-							 mail: user.mail,
-							 type: usrtmp.doc.type,
-							 roles: usrtmp.doc.roles
-						};
-						client.send(JSON.stringify(userupdate));
-					}else{
-						if (callback){
-							callback(err, undefined);
-						}
-					}
-				});
-			}
+		});
 	}
 };
-/**
- * rendo pubbliche solo le funzioni relative a USER
+/** 
+ * Recupera le informazioni d'utente dal server.
+ *
+ * callback ( function(err, data) ):
+ *                 funzione di callback, NON OPZIONALE, chiamata sia in caso di errore che di successo;
+ *         err: oggetto che descrive l'errore, se si è verificato;
+ *        data: (object) le info sull'utente
+ *              {
+ *                  _id:             (string)
+ *                  _rev:            (string)
+ *                  derived_key:     (string)
+ *                  iterations:      (number)
+ *                  mail:            (string)
+ *                  name:            (string)
+ *                  nick:            (string)
+ *                  password_scheme: (string)
+ *                  roles:           (array)
+ *                  salt:            (string)
+ *                  type:            (string)
+ *              }
  */
-exports.user = {
-	check: user.check,
-	getRemote: user.getRemote,
-	isConfigured: user.isConfigured,
-	set: user.set,
-	signup: user.signup,
-	update: user.update,
-	doc: user.doc
+Georep.prototype.getRemoteUser = function(callback){
+		/* callback è obbligatorio perchè getRemote usa una funzione asincrona */
+	if( arguments.length != 1){
+		throw {
+			error: 'getRemote() richiede un argomento: callback (function(err, data)).',
+		};	
+	} else if (typeof callback != 'function'){
+		throw {
+			error: 'Parametro non valido: callback deve essere \'function\'.',
+			args: arguments
+		};
+	} else {
+		var url = this.db.getURLServer() + '/_users/' + this.user._id;
+		var client = Ti.Network.createHTTPClient({
+			onload: function(data){
+				callback(undefined, this.responseText);
+			},
+			onerror: function(e){
+				callback(e, undefined);
+			}
+		});
+		client.open("GET", url);
+		
+		client.setRequestHeader("Authorization", 'Basic ' + this.user.base64);
+		client.setRequestHeader("Accept", 'application/json');
+		
+		client.send();
+	}
+};
+
+exports.Georep = Georep;
+
+/** -- Funzioni ausiliare per GEOREP */
+
+/**
+ * Verifica la correttezza delle configurazioni per Georep
+ */
+var georepConfValidator = function (gc) {
+	if (!gc)
+		throw {
+			error: 'a georepConf object is required',
+			georepConf: gc
+		};
+	else if (!gc.db   || !(gc.db   instanceof DB)   ||
+	         !gc.user || !(gc.user instanceof User)  )
+		throw {
+			error: 'some georepConf properties are invalid',
+			georepConf: gc
+		};
+	else
+		return true;
+};
+/**
+ * Verifica la correttezza dell'oggetto che descrive un punto nella mappa.
+ */
+var mapPointValidator = function (point) {
+	return !(typeof point != 'object' ||
+	!point.lng || typeof point.lng != 'number'|| point.lng < -180 || point.lng > 180 ||
+	!point.lat || typeof point.lat != 'number'|| point.lat <  -90 || point.lat >  90  );
+};
+
+
+
+/** -- COSTANTI utilizzate nel resto del codice ---------------------------------------- */
+
+var constants = {
+	/** vettore contenente l'elenco dei designDoc usati */
+	designDocs: [
+		{
+			name: 'queries', /** nome di questo design document */
+			handlers: [ /** vettore dei gestori delle diverse views */
+				{
+					name: '_view', /** gestore delle views map-reduce */
+					views: ['allDocsByUser'] /** elenco delle views gestite da questo gestore */
+				},
+				{
+					name: '_spatial', /** gestore delle views spaziali di geocouch */
+					views: ['allDocsByLoc'] /** elenco delle views spaziali */
+				}
+			]
+		}
+	]
 };
