@@ -1,0 +1,5 @@
+<Alloy>
+	<Window id="winSendRepo" title="Segnala">
+    	<Label id="labelSendRepo" color="#999">Invio Segnalazione</Label>
+    </Window>
+</Alloy>

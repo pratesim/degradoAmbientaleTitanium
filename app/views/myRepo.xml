@@ -1,0 +1,5 @@
+<Alloy>
+	<Window id="winMyRepo" title="Mie Segnalazioni">
+    	<Label id="labelMyRepo" color="#999">Le mie segnalazioni</Label>
+    </Window>
+</Alloy>

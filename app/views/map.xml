@@ -1,0 +1,5 @@
+<Alloy>
+	<Window id="winMap" title="Mappa">
+		<Label id="labelMap" color="#999">Mappa</Label>
+	</Window>
+</Alloy>
