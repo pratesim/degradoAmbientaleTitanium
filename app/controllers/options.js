@@ -6,6 +6,7 @@ $.winOptions.addEventListener("open", function() {
             var actionBar = $.winOptions.activity.actionBar;
             if (actionBar) {
                 actionBar.title = "Opzioni";
+                actionBar.displayHomeAsUp = true;
                 actionBar.onHomeIconItemSelected = function() {
                    $.winOptions.close();
                 };

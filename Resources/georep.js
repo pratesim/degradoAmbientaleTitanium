@@ -1,10 +1,7 @@
 var User = function(userConf) {
     if (userConfValidator(userConf)) {
-        this._id = "org.couchdb.user:" + userConf.name;
         this.name = userConf.name;
         this.password = userConf.password;
-        this.type = "user";
-        this.roles = [];
         this.nick = userConf.nick;
         this.mail = userConf.mail;
         this.base64 = Ti.Utils.base64encode(userConf.name + ":" + userConf.password).text;
@@ -13,22 +10,39 @@ var User = function(userConf) {
 
 User.prototype.update = function(newUserConf) {
     var oldUserConf = {
-        name: this.name,
-        password: this.password,
-        nick: this.nick,
-        mail: this.name
+        name: this.getName(),
+        password: this.getPassword(),
+        nick: this.getNick(),
+        mail: this.getMail()
     };
     if (userConfValidator(newUserConf)) {
-        this._id = "org.couchdb.user:" + newUserConf.name;
         this.name = newUserConf.name;
         this.password = newUserConf.password;
-        this.type = "user";
-        this.roles = [];
         this.nick = newUserConf.nick;
         this.mail = newUserConf.mail;
         this.base64 = Ti.Utils.base64encode(newUserConf.name + ":" + newUserConf.password).text;
         return oldUserConf;
     }
+};
+
+User.prototype.getName = function() {
+    return this.name;
+};
+
+User.prototype.getPassword = function() {
+    return this.password;
+};
+
+User.prototype.getNick = function() {
+    return this.nick;
+};
+
+User.prototype.getMail = function() {
+    return this.mail;
+};
+
+User.prototype.getBase64 = function() {
+    return this.base64;
 };
 
 exports.User = User;
@@ -57,12 +71,32 @@ var DB = function(dbConf) {
     }
 };
 
+DB.prototype.getProto = function() {
+    return this.proto;
+};
+
+DB.prototype.getHost = function() {
+    return this.host;
+};
+
+DB.prototype.getPort = function() {
+    return this.port;
+};
+
+DB.prototype.getName = function() {
+    return this.name;
+};
+
+DB.prototype.getAdmin = function() {
+    return this.admin;
+};
+
 DB.prototype.getURLServer = function() {
-    return this.proto + "://" + this.host + ":" + this.port;
+    return this.getProto() + "://" + this.getHost() + ":" + this.getPort();
 };
 
 DB.prototype.getURLDB = function() {
-    return this.proto + "://" + this.host + ":" + this.port + "/" + this.name;
+    return this.getProto() + "://" + this.getHost() + ":" + this.getPort() + "/" + this.getName();
 };
 
 exports.DB = DB;
@@ -85,6 +119,10 @@ var Admin = function(adminConf) {
     adminConfValidator(adminConf) && (this.base64 = Ti.Utils.base64encode(adminConf.name + ":" + adminConf.password).text);
 };
 
+Admin.prototype.getBase64 = function() {
+    return this.base64;
+};
+
 exports.Admin = Admin;
 
 var adminConfValidator = function(ac) {
@@ -104,8 +142,27 @@ var adminConfValidator = function(ac) {
 var Georep = function(georepConf) {
     if (georepConfValidator(georepConf)) {
         this.db = georepConf.db;
-        this.user = georepConf.user;
+        this.user = {
+            localData: georepConf.user,
+            remoteData: {
+                _id: "org.couchdb.user:" + georepConf.user.getName(),
+                type: "user",
+                roles: []
+            }
+        };
     }
+};
+
+Georep.prototype.getUser = function() {
+    return this.user.localData;
+};
+
+Georep.prototype.getDb = function() {
+    return this.db;
+};
+
+Georep.prototype.getUserId = function() {
+    return this.user.remoteData._id;
 };
 
 Georep.prototype.getDoc = function(docId, attachments, callback) {
@@ -132,7 +189,7 @@ Georep.prototype.getDoc = function(docId, attachments, callback) {
         }
     });
     client.open("GET", url);
-    client.setRequestHeader("Authorization", "Basic " + this.user.base64);
+    client.setRequestHeader("Authorization", "Basic " + this.getUser().getBase64());
     client.setRequestHeader("Accept", "application/json");
     client.send();
 };
@@ -152,7 +209,7 @@ Georep.prototype.getDocsInBox = function(bl_corner, tr_corner, callback) {
     };
     var viewPath = constants.designDocs[0].name + "/" + constants.designDocs[0].handlers[1].name + "/" + constants.designDocs[0].handlers[1].views[0];
     var queryOpts = "?bbox=" + bl_corner.lng + "," + bl_corner.lat + "," + tr_corner.lng + "," + tr_corner.lat;
-    var url = this.db.getURLDB() + "/_design/" + viewPath + queryOpts;
+    var url = this.getDb().getURLDB() + "/_design/" + viewPath + queryOpts;
     var client = Ti.Network.createHTTPClient({
         onload: function() {
             callback && callback(void 0, this.responseText);
@@ -162,7 +219,7 @@ Georep.prototype.getDocsInBox = function(bl_corner, tr_corner, callback) {
         }
     });
     client.open("GET", url);
-    client.setRequestHeader("Authorization", "Basic " + this.user.base64);
+    client.setRequestHeader("Authorization", "Basic " + this.getUser().getBase64());
     client.setRequestHeader("Accept", "application/json");
     client.send();
 };
@@ -182,7 +239,7 @@ Georep.prototype.getUserDocs = function(userId, callback) {
         error: "parametro opzionale non valido: callback deve essere una funzione.",
         args: arguments
     };
-    var url = this.db.getURLDB() + "/_design/" + viewPath + queryOpts;
+    var url = this.getDb().getURLDB() + "/_design/" + viewPath + queryOpts;
     var client = Ti.Network.createHTTPClient({
         onload: function() {
             callback && callback(void 0, this.responseText);
@@ -192,7 +249,7 @@ Georep.prototype.getUserDocs = function(userId, callback) {
         }
     });
     client.open("GET", url);
-    client.setRequestHeader("Authorization", "Basic " + this.user.base64);
+    client.setRequestHeader("Authorization", "Basic " + this.getUser().getBase64());
     client.setRequestHeader("Accept", "application/json");
     client.send();
 };
@@ -207,28 +264,28 @@ Georep.prototype.postDoc = function(doc, callback) {
         args: arguments
     };
     if ("function" != typeof callback) throw {
-        error: "Il paramentro opzionale deve essere una funzione",
+        error: "Il parametro opzionale deve essere una funzione",
         args: arguments
     };
     var newDoc = {};
-    newDoc.userId = this.user._id;
+    newDoc.userId = this.getUserId();
     newDoc.title = doc.title;
     newDoc.msg = doc.msg;
     newDoc.loc = doc.loc;
     newDoc._attachments = {
         img: doc.img
     };
-    var url = this.db.getURLDB();
+    var url = this.getDb().getURLDB();
     var client = Ti.Network.createHTTPClient({
-        onload: function(data) {
-            callback && callback(void 0, data);
+        onload: function() {
+            callback && callback(void 0, this.responseText);
         },
         error: function(e) {
             callback && callback(e, void 0);
         }
     });
     client.open("POST", url);
-    client.setRequestHeader("Authorization", "Basic " + this.user.base64);
+    client.setRequestHeader("Authorization", "Basic " + this.getUser().getBase64());
     client.setRequestHeader("Content-Type", "application/json");
     client.send(JSON.stringify(newDoc));
 };
@@ -238,7 +295,7 @@ Georep.prototype.checkRemoteUser = function(callback) {
         error: "checkUser() richiede un argomento: callback (function(err, data)).",
         args: arguments
     };
-    var url = this.db.getURLServer();
+    var url = this.getDb().getURLServer();
     var client = Ti.Network.createHTTPClient({
         onload: function() {
             callback(void 0, {
@@ -252,7 +309,7 @@ Georep.prototype.checkRemoteUser = function(callback) {
         }
     });
     client.open("GET", url);
-    client.setRequestHeader("Authorization", "Basic " + this.user.base64);
+    client.setRequestHeader("Authorization", "Basic " + this.getUser().getBase64());
     client.send();
 };
 
@@ -261,40 +318,39 @@ Georep.prototype.signupRemoteUser = function(callback) {
         error: "Il parametro opzionale deve essere una funzione",
         args: arguments
     };
-    var url = this.db.getURLServer() + "/_users/" + this.user._id;
-    Ti.API.debug(url);
+    var url = this.getDb().getURLServer() + "/_users/" + this.getUserId();
     var client = Ti.Network.createHTTPClient({
-        onload: function(data) {
-            callback && callback(void 0, data);
+        onload: function() {
+            callback && callback(void 0, this.responseText);
         },
         onerror: function(e) {
             callback && callback(e, void 0);
         }
     });
     client.open("PUT", url);
-    client.setRequestHeader("Authorization", "Basic " + this.db.admin.base64);
+    client.setRequestHeader("Authorization", "Basic " + this.getDb().getAdmin().getBase64());
     client.setRequestHeader("Content-Type", "application/json");
     var usersignup = {
-        name: this.user.name,
-        password: this.user.password,
-        nick: this.user.nick,
-        mail: this.user.mail,
-        type: this.user.type,
-        roles: this.user.roles
+        name: this.getUser().getName(),
+        password: this.getUser().getPassword(),
+        nick: this.getUser().getNick(),
+        mail: this.getUser().getMail(),
+        type: "user",
+        roles: []
     };
     client.send(JSON.stringify(usersignup));
 };
 
-Georep.prototype.updateRemoteUser = function(user, callback) {
+Georep.prototype.updateRemoteUser = function(userConf, callback) {
     if (1 > arguments.length) throw {
         error: "update() richiede un argomento: user (object).",
         args: arguments
     };
-    if ("object" != typeof user) throw {
+    if ("object" != typeof userConf) throw {
         error: "Impossibile aggiornare l'utente, parametro non valido.",
         args: arguments
     };
-    if (!user.nick || "string" != typeof user.nick || !user.mail || "string" != typeof user.mail) throw {
+    if (!userConf.nick || "string" != typeof userConf.nick || !userConf.mail || "string" != typeof userConf.mail) throw {
         error: 'Impossibile settare "user", uno o piu\' properties non valide.',
         args: arguments
     };
@@ -306,28 +362,28 @@ Georep.prototype.updateRemoteUser = function(user, callback) {
     this.getRemoteUser(function(err, data) {
         if (err) callback && callback(err, void 0); else {
             var rev = JSON.parse(data)._rev;
-            var url = tmpService.db.getURLServer() + "/_users/" + tmpService.user._id + "?rev=" + rev;
+            var url = tmpService.getDb().getURLServer() + "/_users/" + tmpService.getUserId() + "?rev=" + rev;
             var newLocalUser = {
-                name: tmpService.user.name,
-                password: tmpService.user.password,
-                nick: user.nick,
-                mail: user.mail
+                name: tmpService.getUser().getName(),
+                password: tmpService.getUser().getPassword(),
+                nick: userConf.nick,
+                mail: userConf.mail
             };
             var newRemoteUser = newLocalUser;
-            newRemoteUser.type = tmpService.user.type;
-            newRemoteUser.roles = tmpService.user.roles;
-            newRemoteUser._id = tmpService.user._id;
+            newRemoteUser.type = "user";
+            newRemoteUser.roles = [];
+            newRemoteUser._id = tmpService.getUserId();
             var client = Ti.Network.createHTTPClient({
-                onload: function(data) {
-                    tmpService.user.update(newLocalUser);
-                    callback && callback(void 0, data);
+                onload: function() {
+                    tmpService.getUser().update(newLocalUser);
+                    callback && callback(void 0, this.responseText);
                 },
                 onerror: function(e) {
                     callback && callback(e, void 0);
                 }
             });
             client.open("PUT", url);
-            client.setRequestHeader("Authorization", "Basic " + tmpService.db.admin.base64);
+            client.setRequestHeader("Authorization", "Basic " + tmpService.getDb().getAdmin().getBase64());
             client.setRequestHeader("Content-Type", "application/json");
             client.send(JSON.stringify(newRemoteUser));
         }
@@ -342,7 +398,7 @@ Georep.prototype.getRemoteUser = function(callback) {
         error: "Parametro non valido: callback deve essere 'function'.",
         args: arguments
     };
-    var url = this.db.getURLServer() + "/_users/" + this.user._id;
+    var url = this.getDb().getURLServer() + "/_users/" + this.getUserId();
     var client = Ti.Network.createHTTPClient({
         onload: function() {
             callback(void 0, this.responseText);
@@ -352,7 +408,7 @@ Georep.prototype.getRemoteUser = function(callback) {
         }
     });
     client.open("GET", url);
-    client.setRequestHeader("Authorization", "Basic " + this.user.base64);
+    client.setRequestHeader("Authorization", "Basic " + this.getUser().getBase64());
     client.setRequestHeader("Accept", "application/json");
     client.send();
 };
