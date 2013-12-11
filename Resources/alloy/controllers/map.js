@@ -12,13 +12,13 @@ function Controller() {
     });
     $.__views.winMap && $.addTopLevelView($.__views.winMap);
     $.__views.labelMap = Ti.UI.createLabel({
+        text: "Mappa",
         id: "labelMap",
         color: "#999"
     });
     $.__views.winMap.add($.__views.labelMap);
     exports.destroy = function() {};
     _.extend($, $.__views);
-    $.labelMap.text = "Mappa";
     _.extend($, exports);
 }
 

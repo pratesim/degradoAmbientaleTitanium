@@ -1,16 +1,16 @@
 <Alloy>
-	<TabGroup id="tabGroup" backgroundColor="white" >
+	<TabGroup id="tabGroup" backgroundColor="white">
+		<Menu id="menu" platform="android">
+			<MenuItem id="menuItem" title="Opzioni" onClick="gotoOptions" showAsAction="Ti.Android.SHOW_AS_ACTION_NEVER" />
+        </Menu>
         <Tab id="tabMap" title="Mappa" icon="KS_nav_views.png">
-			<Require src="map"></Require>
+			<Require id="map" src="map"></Require>
         </Tab>
         <Tab id="tabMyRepo" title="Mie Segnalazioni" icon="KS_nav_views.png">
-            <Require src="myRepo"></Require>
+            <Require id="myRepo" src="myRepo"></Require>
         </Tab>
         <Tab id="tabSendRepo" title="Segnala" icon="KS_nav_views.png">
-            <Require src="sendRepo"></Require>
-        </Tab>
-        <Tab id="tabOptions" title="Opzioni" icon="KS_nav_views.png">
-            <Require src="options"></Require>
-        </Tab>        
+            <Require id="sendRepo" src="sendRepo"></Require>
+        </Tab>     
     </TabGroup>
 </Alloy>

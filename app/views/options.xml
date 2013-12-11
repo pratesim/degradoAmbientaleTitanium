@@ -1,5 +1,5 @@
 <Alloy>
-	<Window id="winOptions" title="Opzioni">
+	<Window id="winOptions" title="Opzioni" fullscreen="false">
     	<Label id="labelOptions" color="#999">Opzioni</Label>
     </Window>
 </Alloy>

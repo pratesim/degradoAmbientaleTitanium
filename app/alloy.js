@@ -9,3 +9,8 @@
 // object. For example:
 //
 // Alloy.Globals.someGlobalFunction = function(){};
+Alloy.Globals.index = Alloy.createController('index');
+Alloy.Globals.map = Alloy.createController('map');
+Alloy.Globals.myRepo = Alloy.createController('myRepo');
+Alloy.Globals.sendRepo = Alloy.createController('sendRepo');
+Alloy.Globals.options = Alloy.createController('options');
