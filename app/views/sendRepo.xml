@@ -1,5 +1,18 @@
 <Alloy>
-	<Window id="winSendRepo" title="Segnala">
-    	<Label id="labelSendRepo" color="#999">Invio Segnalazione</Label>
+	<Window id="winSendRepo" title="Segnala" layout="vertical">
+    	<View id="titleView" layout="horizontal" height="Titanium.UI.SIZE">
+	    	<Label id="titleSendRepo" class="Label">Titolo
+	    	</Label>
+	    	<TextArea id="textArea" class="TextArea"
+	            value="Inserisci il titolo"
+	        />
+	    </View>
+	    <View id="msgView" layout="horizontal" height="Titanium.UI.SIZE">
+	        <Label id="msgSendRepo" class="Label">Descrizione	        	
+	        </Label>
+	        <TextArea id="textArea" class="TextArea"
+	            value="Inserisci descrizione"
+	        />
+	   </View>          
     </Window>
 </Alloy>

@@ -1,0 +1,21 @@
+"Label": {
+	width: Ti.UI.SIZE,
+	height: Ti.UI.SIZE,
+	color: "black",
+	fontFamily: 'monospace',
+	font: {
+		fontSize: '8pt'
+	},
+	layout: 'horizontal'
+}
+"TextArea": {
+	width: Ti.UI.FILL,
+	height: Ti.UI.SIZE,
+	color: "black",
+	fontFamily: 'monospace',
+	font: {
+		fontSize: '8pt'
+	},
+	clearOnEdit: true,
+	textAlign: Ti.UI.TEXT_ALIGNMENT_CENTER
+} 

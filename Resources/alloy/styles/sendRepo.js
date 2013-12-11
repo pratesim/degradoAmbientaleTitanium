@@ -1,1 +1,1 @@
-module.exports = [];
+module.exports = [{"isApi":true,"priority":1000.0005,"key":"Label","style":{width:Ti.UI.SIZE,height:Ti.UI.SIZE,color:"black",fontFamily:"monospace",font:{fontSize:"8pt",},layout:"horizontal",}},{"isApi":true,"priority":1000.0006,"key":"TextArea","style":{width:Ti.UI.FILL,height:Ti.UI.SIZE,color:"black",fontFamily:"monospace",font:{fontSize:"8pt",},clearOnEdit:true,textAlign:Ti.UI.TEXT_ALIGNMENT_CENTER,}}];
